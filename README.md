@@ -58,6 +58,7 @@ Run the SQL files in the Supabase SQL Editor:
 supabase/add-exercise-notes.sql
 supabase/add-goals-programs.sql
 supabase/add-program-sharing.sql
+supabase/add-program-days.sql
 ```
 
 The app also expects the existing workout, exercise, set, profile, and custom exercise tables/policies created during development.

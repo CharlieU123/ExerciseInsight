@@ -6,10 +6,13 @@ import { CollapsibleSection } from "../components/CollapsibleSection";
 import { EmptyState } from "../components/EmptyState";
 import {
   exerciseLibrary,
+  createProgramDays,
+  getProgramDays,
   loadTrainingPrograms,
   muscleGroups,
   saveTrainingPrograms,
   splitTypes,
+  type ProgramDay,
   type ProgramExercise,
   type SharedTrainingProgram,
   type TrainingProgram,
@@ -37,7 +40,12 @@ export default function ProgramsPage() {
   const [sets, setSets] = useState("3");
   const [reps, setReps] = useState("8-12");
   const [exerciseNotes, setExerciseNotes] = useState("");
-  const [draftExercises, setDraftExercises] = useState<ProgramExercise[]>([]);
+  const [draftDays, setDraftDays] = useState<ProgramDay[]>(
+    createProgramDays("4", splitTypes[0])
+  );
+  const [selectedDayId, setSelectedDayId] = useState<string | number>(
+    draftDays[0]?.id ?? 1
+  );
   const [userId, setUserId] = useState("");
   const [programMessage, setProgramMessage] = useState("");
   const [shareEmailByProgram, setShareEmailByProgram] = useState<Record<string, string>>(
@@ -50,6 +58,7 @@ export default function ProgramsPage() {
   const [editingProgramId, setEditingProgramId] = useState<string | number | null>(
     null
   );
+  const draftExercises = draftDays.flatMap((day) => day.exercises);
 
   useEffect(() => {
     let shouldIgnore = false;
@@ -127,68 +136,144 @@ export default function ProgramsPage() {
       return;
     }
 
-    setDraftExercises([
-      ...draftExercises,
-      {
-        id: Date.now(),
-        exercise,
-        muscleGroup,
-        sets,
-        reps,
-        notes: exerciseNotes,
-      },
-    ]);
+    setDraftDays(
+      draftDays.map((day) =>
+        String(day.id) === String(selectedDayId)
+          ? {
+              ...day,
+              isRestDay: false,
+              exercises: [
+                ...day.exercises,
+                {
+                  id: Date.now(),
+                  dayId: day.id,
+                  exercise,
+                  muscleGroup,
+                  sets,
+                  reps,
+                  notes: exerciseNotes,
+                },
+              ],
+            }
+          : day
+      )
+    );
     setExerciseNotes("");
   }
 
-  function removeDraftExercise(id: string | number) {
-    setDraftExercises(
-      draftExercises.filter((draftExercise) => draftExercise.id !== id)
+  function syncProgramDays(dayCount: string, newSplitType = splitType) {
+    const nextDays = createProgramDays(dayCount, newSplitType).map((day, index) => ({
+      ...day,
+      ...(draftDays[index] ?? {}),
+      name: draftDays[index]?.name ?? day.name,
+      isRestDay: draftDays[index]?.isRestDay ?? day.isRestDay,
+      notes: draftDays[index]?.notes ?? "",
+      exercises: draftDays[index]?.exercises ?? [],
+    }));
+
+    setDraftDays(nextDays);
+    setSelectedDayId(nextDays[0]?.id ?? "");
+  }
+
+  function updateProgramDay(
+    id: string | number,
+    field: keyof ProgramDay,
+    value: string | boolean
+  ) {
+    setDraftDays(
+      draftDays.map((day) =>
+        day.id === id
+          ? {
+              ...day,
+              [field]: value,
+              exercises: field === "isRestDay" && value === true ? [] : day.exercises,
+            }
+          : day
+      )
+    );
+  }
+
+  function removeDraftExercise(dayId: string | number, exerciseId: string | number) {
+    setDraftDays(
+      draftDays.map((day) =>
+        day.id === dayId
+          ? {
+              ...day,
+              exercises: day.exercises.filter(
+                (draftExercise) => draftExercise.id !== exerciseId
+              ),
+            }
+          : day
+      )
     );
   }
 
   function updateDraftExercise(
+    dayId: string | number,
     id: string | number,
     field: keyof ProgramExercise,
     value: string
   ) {
-    setDraftExercises(
-      draftExercises.map((draftExercise) =>
-        draftExercise.id === id
+    setDraftDays(
+      draftDays.map((day) =>
+        day.id === dayId
           ? {
-              ...draftExercise,
-              [field]: value,
+              ...day,
+              exercises: day.exercises.map((draftExercise) =>
+                draftExercise.id === id
+                  ? {
+                      ...draftExercise,
+                      [field]: value,
+                    }
+                  : draftExercise
+              ),
             }
-          : draftExercise
+          : day
       )
     );
   }
 
   function resetProgramForm() {
+    const resetDays = createProgramDays("4", splitTypes[0]);
+
     setName("");
     setSplitType(splitTypes[0]);
     setDaysPerWeek("4");
     setNotes("");
-    setDraftExercises([]);
+    setDraftDays(resetDays);
+    setSelectedDayId(resetDays[0]?.id ?? "");
     setEditingProgramId(null);
   }
 
   function editProgram(program: TrainingProgram) {
+    const programDays = getProgramDays(program);
+
     setEditingProgramId(program.id);
     setName(program.name);
     setSplitType(program.splitType);
     setDaysPerWeek(program.daysPerWeek);
     setNotes(program.notes);
-    setDraftExercises(program.exercises);
+    setDraftDays(programDays);
+    setSelectedDayId(programDays[0]?.id ?? "");
     setProgramMessage("Editing " + program.name + ".");
   }
 
   async function saveProgram(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (draftExercises.length === 0) {
+    if (draftDays.length === 0) {
       return;
     }
+
+    const normalizedDays = draftDays.map((day) => ({
+      ...day,
+      exercises: day.isRestDay
+        ? []
+        : day.exercises.map((programExercise) => ({
+            ...programExercise,
+            dayId: day.id,
+          })),
+    }));
 
     const newProgram = {
       id: editingProgramId ?? Date.now(),
@@ -196,7 +281,8 @@ export default function ProgramsPage() {
       splitType,
       daysPerWeek,
       notes,
-      exercises: draftExercises,
+      days: normalizedDays,
+      exercises: normalizedDays.flatMap((day) => day.exercises),
     };
 
     if (editingProgramId) {
@@ -356,7 +442,10 @@ export default function ProgramsPage() {
                     name="split-type"
                     className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
                     value={splitType}
-                    onChange={(event) => setSplitType(event.target.value)}
+                    onChange={(event) => {
+                      setSplitType(event.target.value);
+                      syncProgramDays(daysPerWeek, event.target.value);
+                    }}
                   >
                     {splitTypes.map((split) => (
                       <option key={split} value={split}>
@@ -378,7 +467,10 @@ export default function ProgramsPage() {
                     min="1"
                     max="7"
                     value={daysPerWeek}
-                    onChange={(event) => setDaysPerWeek(event.target.value)}
+                    onChange={(event) => {
+                      setDaysPerWeek(event.target.value);
+                      syncProgramDays(event.target.value);
+                    }}
                   />
                 </div>
               </div>
@@ -398,8 +490,69 @@ export default function ProgramsPage() {
               </div>
 
               <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                <h2 className="mb-3 font-semibold">Program Days</h2>
+                <div className="space-y-3">
+                  {draftDays.map((day, index) => (
+                    <div
+                      key={day.id}
+                      className="rounded-md border border-gray-800 bg-gray-900 p-3"
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-blue-300">
+                          Day {index + 1}
+                        </p>
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={day.isRestDay}
+                            onChange={(event) =>
+                              updateProgramDay(day.id, "isRestDay", event.target.checked)
+                            }
+                          />
+                          Rest day
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <input
+                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                          value={day.name}
+                          onChange={(event) =>
+                            updateProgramDay(day.id, "name", event.target.value)
+                          }
+                          placeholder="Push, Pull, Legs, Rest"
+                          aria-label={"Name for day " + (index + 1)}
+                        />
+                        <input
+                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                          value={day.notes}
+                          onChange={(event) =>
+                            updateProgramDay(day.id, "notes", event.target.value)
+                          }
+                          placeholder="Day notes"
+                          aria-label={"Notes for day " + (index + 1)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
                 <h2 className="mb-3 font-semibold">Add Exercise</h2>
                 <div className="grid gap-3">
+                  <select
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={String(selectedDayId)}
+                    onChange={(event) => setSelectedDayId(event.target.value)}
+                  >
+                    {draftDays.map((day, index) => (
+                      <option key={day.id} value={String(day.id)}>
+                        Day {index + 1}: {day.name}
+                        {day.isRestDay ? " (Rest)" : ""}
+                      </option>
+                    ))}
+                  </select>
+
                   <select
                     className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
                     value={exercise}
@@ -456,91 +609,128 @@ export default function ProgramsPage() {
                 </div>
               </div>
 
-              {draftExercises.length > 0 && (
-                <div className="space-y-2">
-                  {draftExercises.map((draftExercise) => (
+              {draftDays.length > 0 && (
+                <div className="space-y-4">
+                  {draftDays.map((day, dayIndex) => (
                     <div
-                      key={draftExercise.id}
+                      key={day.id}
                       className="rounded-md border border-gray-800 bg-gray-950 p-3"
                     >
-                      <div className="grid gap-3">
-                        <input
-                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                          value={draftExercise.exercise}
-                          onChange={(event) =>
-                            updateDraftExercise(
-                              draftExercise.id,
-                              "exercise",
-                              event.target.value
-                            )
-                          }
-                          aria-label="Program exercise name"
-                        />
-                        <select
-                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                          value={draftExercise.muscleGroup}
-                          onChange={(event) =>
-                            updateDraftExercise(
-                              draftExercise.id,
-                              "muscleGroup",
-                              event.target.value
-                            )
-                          }
-                          aria-label="Program exercise muscle group"
-                        >
-                          {muscleGroups.map((group) => (
-                            <option key={group} value={group}>
-                              {group}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <input
-                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                            value={draftExercise.sets}
-                            onChange={(event) =>
-                              updateDraftExercise(
-                                draftExercise.id,
-                                "sets",
-                                event.target.value
-                              )
-                            }
-                            aria-label="Program exercise sets"
-                          />
-                          <input
-                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                            value={draftExercise.reps}
-                            onChange={(event) =>
-                              updateDraftExercise(
-                                draftExercise.id,
-                                "reps",
-                                event.target.value
-                              )
-                            }
-                            aria-label="Program exercise reps"
-                          />
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">
+                            Day {dayIndex + 1}: {day.name}
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            {day.isRestDay
+                              ? "Rest day"
+                              : `${day.exercises.length} exercise${
+                                  day.exercises.length === 1 ? "" : "s"
+                                }`}
+                          </p>
                         </div>
-                        <input
-                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                          value={draftExercise.notes}
-                          onChange={(event) =>
-                            updateDraftExercise(
-                              draftExercise.id,
-                              "notes",
-                              event.target.value
-                            )
-                          }
-                          placeholder="Exercise notes"
-                          aria-label="Program exercise notes"
-                        />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => removeDraftExercise(draftExercise.id)}
-                        className="mt-3 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
-                      >
-                        Remove
-                      </button>
+
+                      {day.exercises.length === 0 ? (
+                        <p className="text-sm text-gray-400">
+                          {day.isRestDay
+                            ? "No exercises needed for this rest day."
+                            : "No exercises added to this day yet."}
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {day.exercises.map((draftExercise) => (
+                            <div
+                              key={draftExercise.id}
+                              className="rounded-md border border-gray-800 bg-gray-900 p-3"
+                            >
+                              <div className="grid gap-3">
+                                <input
+                                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                                  value={draftExercise.exercise}
+                                  onChange={(event) =>
+                                    updateDraftExercise(
+                                      day.id,
+                                      draftExercise.id,
+                                      "exercise",
+                                      event.target.value
+                                    )
+                                  }
+                                  aria-label="Program exercise name"
+                                />
+                                <select
+                                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                                  value={draftExercise.muscleGroup}
+                                  onChange={(event) =>
+                                    updateDraftExercise(
+                                      day.id,
+                                      draftExercise.id,
+                                      "muscleGroup",
+                                      event.target.value
+                                    )
+                                  }
+                                  aria-label="Program exercise muscle group"
+                                >
+                                  {muscleGroups.map((group) => (
+                                    <option key={group} value={group}>
+                                      {group}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <input
+                                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                                    value={draftExercise.sets}
+                                    onChange={(event) =>
+                                      updateDraftExercise(
+                                        day.id,
+                                        draftExercise.id,
+                                        "sets",
+                                        event.target.value
+                                      )
+                                    }
+                                    aria-label="Program exercise sets"
+                                  />
+                                  <input
+                                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                                    value={draftExercise.reps}
+                                    onChange={(event) =>
+                                      updateDraftExercise(
+                                        day.id,
+                                        draftExercise.id,
+                                        "reps",
+                                        event.target.value
+                                      )
+                                    }
+                                    aria-label="Program exercise reps"
+                                  />
+                                </div>
+                                <input
+                                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                                  value={draftExercise.notes}
+                                  onChange={(event) =>
+                                    updateDraftExercise(
+                                      day.id,
+                                      draftExercise.id,
+                                      "notes",
+                                      event.target.value
+                                    )
+                                  }
+                                  placeholder="Exercise notes"
+                                  aria-label="Program exercise notes"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeDraftExercise(day.id, draftExercise.id)}
+                                className="mt-3 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -655,21 +845,53 @@ export default function ProgramsPage() {
                     {program.notes && (
                       <p className="mb-3 text-sm text-gray-300">{program.notes}</p>
                     )}
-                    <div className="space-y-2">
-                      {program.exercises.map((programExercise) => (
+                    <div className="space-y-3">
+                      {getProgramDays(program).map((day, index) => (
                         <div
-                          key={programExercise.id}
+                          key={day.id}
                           className="rounded-md border border-gray-800 bg-gray-900 p-3"
                         >
-                          <p className="font-semibold">{programExercise.exercise}</p>
-                          <p className="text-sm text-gray-400">
-                            {programExercise.muscleGroup} · {programExercise.sets} x{" "}
-                            {programExercise.reps}
-                          </p>
-                          {programExercise.notes && (
-                            <p className="mt-1 text-sm text-gray-300">
-                              {programExercise.notes}
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold">
+                                Day {index + 1}: {day.name}
+                              </p>
+                              {day.notes && (
+                                <p className="text-sm text-gray-400">{day.notes}</p>
+                              )}
+                            </div>
+                            {day.isRestDay && (
+                              <span className="rounded-full bg-white/10 px-2 py-1 text-xs font-semibold text-gray-200">
+                                Rest
+                              </span>
+                            )}
+                          </div>
+                          {day.exercises.length === 0 ? (
+                            <p className="text-sm text-gray-400">
+                              {day.isRestDay ? "Rest day" : "No exercises planned."}
                             </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {day.exercises.map((programExercise) => (
+                                <div
+                                  key={programExercise.id}
+                                  className="rounded-md border border-gray-800 bg-gray-950 p-3"
+                                >
+                                  <p className="font-semibold">
+                                    {programExercise.exercise}
+                                  </p>
+                                  <p className="text-sm text-gray-400">
+                                    {programExercise.muscleGroup} ·{" "}
+                                    {programExercise.sets} x {programExercise.reps}
+                                  </p>
+                                  {programExercise.notes && (
+                                    <p className="mt-1 text-sm text-gray-300">
+                                      {programExercise.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
                       ))}
@@ -719,21 +941,53 @@ export default function ProgramsPage() {
                       {program.notes && (
                         <p className="mb-3 text-sm text-gray-300">{program.notes}</p>
                       )}
-                      <div className="space-y-2">
-                        {program.exercises.map((programExercise) => (
+                      <div className="space-y-3">
+                        {getProgramDays(program).map((day, index) => (
                           <div
-                            key={programExercise.id}
+                            key={day.id}
                             className="rounded-md border border-gray-800 bg-gray-900 p-3"
                           >
-                            <p className="font-semibold">{programExercise.exercise}</p>
-                            <p className="text-sm text-gray-400">
-                              {programExercise.muscleGroup} · {programExercise.sets} x{" "}
-                              {programExercise.reps}
-                            </p>
-                            {programExercise.notes && (
-                              <p className="mt-1 text-sm text-gray-300">
-                                {programExercise.notes}
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="font-semibold">
+                                  Day {index + 1}: {day.name}
+                                </p>
+                                {day.notes && (
+                                  <p className="text-sm text-gray-400">{day.notes}</p>
+                                )}
+                              </div>
+                              {day.isRestDay && (
+                                <span className="rounded-full bg-white/10 px-2 py-1 text-xs font-semibold text-gray-200">
+                                  Rest
+                                </span>
+                              )}
+                            </div>
+                            {day.exercises.length === 0 ? (
+                              <p className="text-sm text-gray-400">
+                                {day.isRestDay ? "Rest day" : "No exercises planned."}
                               </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {day.exercises.map((programExercise) => (
+                                  <div
+                                    key={programExercise.id}
+                                    className="rounded-md border border-gray-800 bg-gray-950 p-3"
+                                  >
+                                    <p className="font-semibold">
+                                      {programExercise.exercise}
+                                    </p>
+                                    <p className="text-sm text-gray-400">
+                                      {programExercise.muscleGroup} ·{" "}
+                                      {programExercise.sets} x {programExercise.reps}
+                                    </p>
+                                    {programExercise.notes && (
+                                      <p className="mt-1 text-sm text-gray-300">
+                                        {programExercise.notes}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
                         ))}

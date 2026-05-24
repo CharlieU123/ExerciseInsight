@@ -1,10 +1,12 @@
 import { supabase } from "./supabaseClient";
 import type {
   FitnessGoal,
+  ProgramDay,
   ProgramExercise,
   SharedTrainingProgram,
   TrainingProgram,
 } from "./fitnessData";
+import { getProgramDays, getProgramExercises } from "./fitnessData";
 
 type SupabaseGoalRow = {
   id: string;
@@ -18,11 +20,20 @@ type SupabaseGoalRow = {
 
 type SupabaseProgramExerciseRow = {
   id: string;
+  program_day_id?: string | null;
   exercise: string;
   muscle_group: string;
   sets: string;
   reps: string;
   notes: string;
+};
+
+type SupabaseProgramDayRow = {
+  id: string;
+  name: string;
+  is_rest_day: boolean;
+  notes: string;
+  program_exercises: SupabaseProgramExerciseRow[];
 };
 
 type SupabaseProgramRow = {
@@ -32,6 +43,7 @@ type SupabaseProgramRow = {
   split_type: string;
   days_per_week: string;
   notes: string;
+  program_days?: SupabaseProgramDayRow[];
   program_exercises: SupabaseProgramExerciseRow[];
 };
 
@@ -65,6 +77,7 @@ function mapProgramExerciseFromSupabase(
 ): ProgramExercise {
   return {
     id: row.id,
+    dayId: row.program_day_id ?? undefined,
     exercise: row.exercise,
     muscleGroup: row.muscle_group,
     sets: row.sets,
@@ -73,14 +86,36 @@ function mapProgramExerciseFromSupabase(
   };
 }
 
+function mapProgramDayFromSupabase(row: SupabaseProgramDayRow): ProgramDay {
+  return {
+    id: row.id,
+    name: row.name,
+    isRestDay: row.is_rest_day,
+    notes: row.notes,
+    exercises: row.program_exercises.map((exercise) => ({
+      ...mapProgramExerciseFromSupabase(exercise),
+      dayId: row.id,
+    })),
+  };
+}
+
 function mapProgramFromSupabase(row: SupabaseProgramRow): TrainingProgram {
+  const days = Array.isArray(row.program_days)
+    ? row.program_days.map(mapProgramDayFromSupabase)
+    : [];
+  const exercises =
+    days.length > 0
+      ? days.flatMap((day) => day.exercises)
+      : row.program_exercises.map(mapProgramExerciseFromSupabase);
+
   return {
     id: row.id,
     name: row.name,
     splitType: row.split_type,
     daysPerWeek: row.days_per_week,
     notes: row.notes,
-    exercises: row.program_exercises.map(mapProgramExerciseFromSupabase),
+    days,
+    exercises,
   };
 }
 
@@ -192,7 +227,7 @@ export async function loadProgramsFromSupabase() {
   const { data, error } = await supabase
     .from("training_programs")
     .select(
-      "id, name, split_type, days_per_week, notes, program_exercises(id, exercise, muscle_group, sets, reps, notes)"
+      "id, name, split_type, days_per_week, notes, program_days(id, name, is_rest_day, notes, program_exercises(id, program_day_id, exercise, muscle_group, sets, reps, notes)), program_exercises(id, program_day_id, exercise, muscle_group, sets, reps, notes)"
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -214,7 +249,7 @@ export async function loadSharedProgramsFromSupabase() {
   const { data, error } = await supabase
     .from("program_shares")
     .select(
-      "id, owner_id, shared_with_email, permission, training_programs(id, user_id, name, split_type, days_per_week, notes, program_exercises(id, exercise, muscle_group, sets, reps, notes))"
+      "id, owner_id, shared_with_email, permission, training_programs(id, user_id, name, split_type, days_per_week, notes, program_days(id, name, is_rest_day, notes, program_exercises(id, program_day_id, exercise, muscle_group, sets, reps, notes)), program_exercises(id, program_day_id, exercise, muscle_group, sets, reps, notes))"
     )
     .order("created_at", { ascending: false });
 
@@ -261,7 +296,16 @@ export async function saveSharedProgramCopyToSupabase(
     notes: sharedProgram.notes
       ? "Copied from a shared program. " + sharedProgram.notes
       : "Copied from a shared program.",
-    exercises: sharedProgram.exercises.map((exercise, index) => ({
+    days: getProgramDays(sharedProgram).map((day, dayIndex) => ({
+      ...day,
+      id: Date.now() + dayIndex,
+      exercises: day.exercises.map((exercise, exerciseIndex) => ({
+        ...exercise,
+        id: Date.now() + dayIndex + exerciseIndex + 100,
+        dayId: Date.now() + dayIndex,
+      })),
+    })),
+    exercises: getProgramExercises(sharedProgram).map((exercise, index) => ({
       ...exercise,
       id: Date.now() + index,
     })),
@@ -291,29 +335,64 @@ export async function saveProgramToSupabase(program: TrainingProgram) {
     throw new Error(programError?.message ?? "Could not save program.");
   }
 
-  const exerciseRows = program.exercises.map((programExercise, index) => ({
-    program_id: savedProgram.id,
-    user_id: userId,
-    exercise_order: index + 1,
-    exercise: programExercise.exercise,
-    muscle_group: programExercise.muscleGroup,
-    sets: programExercise.sets,
-    reps: programExercise.reps,
-    notes: programExercise.notes,
-  }));
+  const programDays = getProgramDays(program);
+
+  const { data: savedDays, error: daysError } = await supabase
+    .from("program_days")
+    .insert(
+      programDays.map((day, index) => ({
+        program_id: savedProgram.id,
+        user_id: userId,
+        day_order: index + 1,
+        name: day.name,
+        is_rest_day: day.isRestDay,
+        notes: day.notes,
+      }))
+    )
+    .select("id, name, is_rest_day, notes");
+
+  if (daysError || !savedDays) {
+    throw new Error(daysError?.message ?? "Could not save program days.");
+  }
+
+  const exerciseRows = programDays.flatMap((day, dayIndex) =>
+    day.exercises.map((programExercise, exerciseIndex) => ({
+      program_id: savedProgram.id,
+      program_day_id: savedDays[dayIndex].id,
+      user_id: userId,
+      exercise_order: exerciseIndex + 1,
+      exercise: programExercise.exercise,
+      muscle_group: programExercise.muscleGroup,
+      sets: programExercise.sets,
+      reps: programExercise.reps,
+      notes: programExercise.notes,
+    }))
+  );
 
   const { data: savedExercises, error: exercisesError } = await supabase
     .from("program_exercises")
     .insert(exerciseRows)
-    .select("id, exercise, muscle_group, sets, reps, notes");
+    .select("id, program_day_id, exercise, muscle_group, sets, reps, notes");
 
-  if (exercisesError || !savedExercises) {
+  if (exerciseRows.length > 0 && (exercisesError || !savedExercises)) {
     throw new Error(exercisesError?.message ?? "Could not save program exercises.");
   }
 
+  const savedExercisesByDay = ((savedExercises ?? []) as SupabaseProgramExerciseRow[]).reduce<
+    Record<string, SupabaseProgramExerciseRow[]>
+  >((groupedExercises, exercise) => {
+    const dayId = exercise.program_day_id ?? "";
+    groupedExercises[dayId] = [...(groupedExercises[dayId] ?? []), exercise];
+    return groupedExercises;
+  }, {});
+
   return mapProgramFromSupabase({
     ...(savedProgram as Omit<SupabaseProgramRow, "program_exercises">),
-    program_exercises: savedExercises as SupabaseProgramExerciseRow[],
+    program_days: savedDays.map((day) => ({
+      ...(day as Omit<SupabaseProgramDayRow, "program_exercises">),
+      program_exercises: savedExercisesByDay[day.id] ?? [],
+    })),
+    program_exercises: (savedExercises ?? []) as SupabaseProgramExerciseRow[],
   });
 }
 
@@ -350,29 +429,73 @@ export async function updateProgramInSupabase(program: TrainingProgram) {
     throw new Error(deleteExercisesError.message);
   }
 
-  const exerciseRows = program.exercises.map((programExercise, index) => ({
-    program_id: savedProgram.id,
-    user_id: userId,
-    exercise_order: index + 1,
-    exercise: programExercise.exercise,
-    muscle_group: programExercise.muscleGroup,
-    sets: programExercise.sets,
-    reps: programExercise.reps,
-    notes: programExercise.notes,
-  }));
+  const { error: deleteDaysError } = await supabase
+    .from("program_days")
+    .delete()
+    .eq("program_id", String(program.id));
+
+  if (deleteDaysError) {
+    throw new Error(deleteDaysError.message);
+  }
+
+  const programDays = getProgramDays(program);
+
+  const { data: savedDays, error: daysError } = await supabase
+    .from("program_days")
+    .insert(
+      programDays.map((day, index) => ({
+        program_id: savedProgram.id,
+        user_id: userId,
+        day_order: index + 1,
+        name: day.name,
+        is_rest_day: day.isRestDay,
+        notes: day.notes,
+      }))
+    )
+    .select("id, name, is_rest_day, notes");
+
+  if (daysError || !savedDays) {
+    throw new Error(daysError?.message ?? "Could not update program days.");
+  }
+
+  const exerciseRows = programDays.flatMap((day, dayIndex) =>
+    day.exercises.map((programExercise, exerciseIndex) => ({
+      program_id: savedProgram.id,
+      program_day_id: savedDays[dayIndex].id,
+      user_id: userId,
+      exercise_order: exerciseIndex + 1,
+      exercise: programExercise.exercise,
+      muscle_group: programExercise.muscleGroup,
+      sets: programExercise.sets,
+      reps: programExercise.reps,
+      notes: programExercise.notes,
+    }))
+  );
 
   const { data: savedExercises, error: exercisesError } = await supabase
     .from("program_exercises")
     .insert(exerciseRows)
-    .select("id, exercise, muscle_group, sets, reps, notes");
+    .select("id, program_day_id, exercise, muscle_group, sets, reps, notes");
 
-  if (exercisesError || !savedExercises) {
+  if (exerciseRows.length > 0 && (exercisesError || !savedExercises)) {
     throw new Error(exercisesError?.message ?? "Could not update program exercises.");
   }
 
+  const savedExercisesByDay = ((savedExercises ?? []) as SupabaseProgramExerciseRow[]).reduce<
+    Record<string, SupabaseProgramExerciseRow[]>
+  >((groupedExercises, exercise) => {
+    const dayId = exercise.program_day_id ?? "";
+    groupedExercises[dayId] = [...(groupedExercises[dayId] ?? []), exercise];
+    return groupedExercises;
+  }, {});
+
   return mapProgramFromSupabase({
     ...(savedProgram as Omit<SupabaseProgramRow, "program_exercises">),
-    program_exercises: savedExercises as SupabaseProgramExerciseRow[],
+    program_days: savedDays.map((day) => ({
+      ...(day as Omit<SupabaseProgramDayRow, "program_exercises">),
+      program_exercises: savedExercisesByDay[day.id] ?? [],
+    })),
+    program_exercises: (savedExercises ?? []) as SupabaseProgramExerciseRow[],
   });
 }
 
