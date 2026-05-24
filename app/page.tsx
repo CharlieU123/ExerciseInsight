@@ -48,6 +48,7 @@ export default function HomePage() {
   const [programs, setPrograms] = useState<TrainingProgram[]>([]);
   const [profile, setProfile] = useState<Profile>({
     name: "",
+    gender: "",
     age: "",
     height: "",
     weight: "",
@@ -78,7 +79,7 @@ export default function HomePage() {
 
         const { data } = await supabase
           .from("profiles")
-          .select("name, age, height, weight")
+          .select("name, gender, age, height, weight")
           .eq("id", currentUserId)
           .maybeSingle();
 
@@ -86,6 +87,7 @@ export default function HomePage() {
           data
             ? {
                 name: data.name ?? "",
+                gender: data.gender ?? "",
                 age: data.age ?? "",
                 height: data.height ?? "",
                 weight: data.weight ?? "",

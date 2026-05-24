@@ -59,6 +59,7 @@ supabase/add-exercise-notes.sql
 supabase/add-goals-programs.sql
 supabase/add-program-sharing.sql
 supabase/add-program-days.sql
+supabase/add-profile-gender.sql
 ```
 
 The app also expects the existing workout, exercise, set, profile, and custom exercise tables/policies created during development.

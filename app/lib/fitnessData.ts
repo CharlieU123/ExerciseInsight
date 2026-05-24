@@ -58,6 +58,7 @@ export type ExerciseLibraryItem = {
 
 export type Profile = {
   name: string;
+  gender: string;
   age: string;
   height: string;
   weight: string;
@@ -110,10 +111,19 @@ export type FitnessGoal = {
 
 export const emptyProfile: Profile = {
   name: "",
+  gender: "",
   age: "",
   height: "",
   weight: "",
 };
+
+export const genderOptions = [
+  "Prefer not to say",
+  "Female",
+  "Male",
+  "Non-binary",
+  "Self-describe",
+];
 
 export const splitTypes = ["Push/Pull/Legs", "Upper/Lower", "Full Body EOD"];
 

@@ -5,6 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import {
   emptyProfile,
+  genderOptions,
   loadProfile,
   loadWorkouts,
   saveWorkouts,
@@ -44,7 +45,7 @@ export default function ProfilePage() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("name, age, height, weight")
+        .select("name, gender, age, height, weight")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -55,6 +56,7 @@ export default function ProfilePage() {
         const savedProfile = data
           ? {
               name: data.name ?? "",
+              gender: data.gender ?? "",
               age: data.age ?? "",
               height: data.height ?? "",
               weight: data.weight ?? "",
@@ -102,6 +104,7 @@ export default function ProfilePage() {
         {
           id: userId,
           name: profile.name,
+          gender: profile.gender,
           age: profile.age,
           height: profile.height,
           weight: profile.weight,
@@ -203,7 +206,7 @@ export default function ProfilePage() {
             {profileMessage && <p className="mt-1 text-gray-400">{profileMessage}</p>}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-5">
             <div>
               <label htmlFor="profile-name" className="mb-1 block text-sm text-gray-300">Name</label>
               <input
@@ -215,6 +218,24 @@ export default function ProfilePage() {
                 onChange={(event) => updateProfile("name", event.target.value)}
                 placeholder="Charlie"
               />
+            </div>
+
+            <div>
+              <label htmlFor="profile-gender" className="mb-1 block text-sm text-gray-300">Gender</label>
+              <select
+                id="profile-gender"
+                name="profile-gender"
+                className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                value={profile.gender}
+                onChange={(event) => updateProfile("gender", event.target.value)}
+              >
+                <option value="">Select one</option>
+                {genderOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

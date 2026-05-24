@@ -9,8 +9,14 @@ const accentOptions = [
   { name: "Blue", value: "#2563eb" },
   { name: "Teal", value: "#0f766e" },
   { name: "Green", value: "#16a34a" },
+  { name: "Pink", value: "#db2777" },
+  { name: "Rose", value: "#e11d48" },
+  { name: "Orange", value: "#ea580c" },
+  { name: "Yellow", value: "#ca8a04" },
   { name: "Red", value: "#dc2626" },
   { name: "Purple", value: "#7c3aed" },
+  { name: "Indigo", value: "#4f46e5" },
+  { name: "Cyan", value: "#0891b2" },
 ];
 
 function applyTheme(theme: string, accent: string) {
