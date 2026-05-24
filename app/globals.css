@@ -1,26 +1,226 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050816;
+  --foreground: #f8fafc;
+  --surface: #111827;
+  --surface-strong: #020617;
+  --surface-soft: rgba(17, 24, 39, 0.8);
+  --border: rgba(255, 255, 255, 0.1);
+  --muted: #9ca3af;
+  --muted-strong: #d1d5db;
+  --accent: #2563eb;
+  --accent-hover: color-mix(in srgb, var(--accent) 86%, white);
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+:root[data-theme="light"] {
+  --background: #f4f7fb;
+  --foreground: #111827;
+  --surface: #ffffff;
+  --surface-strong: #f8fafc;
+  --surface-soft: rgba(255, 255, 255, 0.88);
+  --border: rgba(15, 23, 42, 0.14);
+  --muted: #64748b;
+  --muted-strong: #334155;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-mono: Menlo, Monaco, Consolas, monospace;
 }
 
 body {
-  background: var(--background);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, var(--accent-soft), transparent 32rem),
+    linear-gradient(135deg, var(--background) 0%, var(--surface-strong) 46%, var(--surface) 100%);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+[class~="bg-gray-950"] {
+  background-color: var(--surface-strong) !important;
+}
+
+[class~="bg-gray-950/85"] {
+  background-color: color-mix(in srgb, var(--surface) 88%, transparent) !important;
+}
+
+[class~="bg-gray-900"],
+[class~="bg-gray-900/70"],
+[class~="bg-gray-900/80"] {
+  background-color: var(--surface-soft) !important;
+}
+
+[class~="bg-gray-800"] {
+  background-color: color-mix(in srgb, var(--surface) 88%, var(--foreground)) !important;
+}
+
+[class~="bg-white/5"],
+[class~="bg-white/10"] {
+  background-color: color-mix(in srgb, var(--foreground) 8%, transparent) !important;
+}
+
+[class~="border-gray-700"],
+[class~="border-gray-800"],
+[class~="border-white/10"] {
+  border-color: var(--border) !important;
+}
+
+[class~="text-white"],
+[class~="text-gray-100"],
+[class~="text-gray-200"] {
+  color: var(--foreground) !important;
+}
+
+[class~="text-gray-300"] {
+  color: var(--muted-strong) !important;
+}
+
+[class~="text-gray-400"],
+[class~="text-gray-500"] {
+  color: var(--muted) !important;
+}
+
+[class~="text-blue-300"],
+[class~="text-blue-400"] {
+  color: var(--accent-hover) !important;
+}
+
+[class~="bg-blue-600"],
+[class~="bg-green-600"] {
+  background-color: var(--accent) !important;
+}
+
+[class~="hover:bg-blue-500"]:hover,
+[class~="hover:bg-green-500"]:hover {
+  background-color: var(--accent-hover) !important;
+}
+
+[class~="border-blue-400/30"],
+[class~="border-blue-800"],
+[class~="border-blue-900"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent) !important;
+}
+
+[class~="bg-blue-950/30"],
+[class~="bg-blue-950/40"] {
+  background-color: var(--accent-soft) !important;
+}
+
+input,
+select,
+textarea {
+  background-color: var(--surface-strong);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+::placeholder {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(circle at top left, var(--accent-soft), transparent 28rem),
+    linear-gradient(135deg, #f8fafc 0%, #eef2f7 52%, #e2e8f0 100%);
+}
+
+:root[data-theme="light"] header {
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--foreground) !important;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme="light"] [class~="bg-gray-900"],
+:root[data-theme="light"] [class~="bg-gray-900/70"],
+:root[data-theme="light"] [class~="bg-gray-900/80"] {
+  background-color: #ffffff !important;
+}
+
+:root[data-theme="light"] [class~="bg-gray-950"] {
+  background-color: #f8fafc !important;
+}
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+:root[data-theme="light"] input:focus,
+:root[data-theme="light"] select:focus,
+:root[data-theme="light"] textarea:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+}
+
+:root[data-theme="light"] [class~="text-green-200"],
+:root[data-theme="light"] [class~="text-blue-100/80"] {
+  color: #334155 !important;
+}
+
+:root[data-theme="light"] [class~="bg-green-950/40"],
+:root[data-theme="light"] [class~="bg-green-950/50"],
+:root[data-theme="light"] [class~="bg-green-950/60"] {
+  background-color: #dcfce7 !important;
+  border-color: #86efac !important;
+}
+
+:root[data-theme="light"] [class~="bg-red-950"],
+:root[data-theme="light"] [class~="bg-red-950/50"] {
+  background-color: #fee2e2 !important;
+  border-color: #fecaca !important;
+}
+
+:root[data-theme="light"] [class~="text-red-200"] {
+  color: #991b1b !important;
+}
+
+:root[data-theme="light"] header a,
+:root[data-theme="light"] header button,
+:root[data-theme="light"] header select {
+  color: var(--foreground) !important;
+}
+
+:root[data-theme="light"] header [class~="bg-white/5"],
+:root[data-theme="light"] header [class~="bg-white/10"] {
+  background-color: #eef2f7 !important;
+  border: 1px solid var(--border);
+}
+
+:root[data-theme="light"] header [class~="hover:bg-white/10"]:hover,
+:root[data-theme="light"] header [class~="hover:bg-white/15"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+:root[data-theme="light"] header [class~="text-gray-300"],
+:root[data-theme="light"] header [class~="text-gray-400"] {
+  color: #334155 !important;
+}
+
+:root[data-theme="light"] header [class~="bg-blue-600"] {
+  color: white !important;
+}
+
+:root[data-theme="light"] header [class~="bg-blue-600"] * {
+  color: white !important;
+}
+
+:root[data-theme="light"] header [class~="bg-red-600/90"] {
+  color: white !important;
+}
+
+:root[data-theme="light"] [class~="shadow-xl"] {
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08) !important;
+}
+
+:root[data-theme="light"] [class~="shadow-blue-950/30"],
+:root[data-theme="light"] [class~="shadow-blue-950/40"] {
+  box-shadow: 0 10px 25px color-mix(in srgb, var(--accent) 18%, transparent) !important;
 }

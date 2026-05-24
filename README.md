@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ExerciseInsight
+
+ExerciseInsight is a full-stack fitness tracking app built with Next.js, TypeScript, Tailwind CSS, and Supabase. It helps users build programs, start workouts from saved programs, log set-level workout data, track goals, review history, and monitor training progress.
+
+## Features
+
+- Supabase authentication and account-based data syncing
+- Workout logging with multiple exercises per session
+- Set-level tracking for weight, reps, RIR, and partial reps
+- Custom workout dates for forgotten sessions
+- Exercise and workout notes
+- Custom private exercise library
+- Program builder with Push/Pull/Legs, Upper/Lower, and Full Body EOD support
+- Start Workout from a saved program
+- Goal tracking with editable progress
+- Previous-performance hints while logging workouts
+- Progress dashboard with recovery and deload recommendations
+- Dark/light mode and accent color settings
+- Local device fallback when logged out
+
+## Tech Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Supabase Auth and Postgres
+- LocalStorage fallback for logged-out users
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create `.env.local` from `.env.example`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_public_key
+```
+
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Supabase Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run the SQL files in the Supabase SQL Editor:
 
-## Learn More
+```txt
+supabase/add-exercise-notes.sql
+supabase/add-goals-programs.sql
+```
 
-To learn more about Next.js, take a look at the following resources:
+The app also expects the existing workout, exercise, set, profile, and custom exercise tables/policies created during development.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Production Checklist
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel Environment Variables.
+- Confirm Supabase Row Level Security policies are enabled.
+- Confirm only the anon public key is used in frontend code.
+- Run `npm run lint`.
+- Run `npm run build`.
+- Test the main flow: sign in, create program, start workout, save workout, edit goal, view dashboard.
 
-## Deploy on Vercel
+## Resume Summary
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+ExerciseInsight is a full-stack fitness tracking app built with Next.js, TypeScript, Tailwind CSS, and Supabase. It supports authenticated workout logging, set-level performance tracking, custom programs, goal tracking, exercise history, previous-performance hints, and cloud-synced user data.

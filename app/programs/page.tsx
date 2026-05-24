@@ -1,0 +1,586 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { CollapsibleSection } from "../components/CollapsibleSection";
+import { EmptyState } from "../components/EmptyState";
+import {
+  exerciseLibrary,
+  loadTrainingPrograms,
+  muscleGroups,
+  saveTrainingPrograms,
+  splitTypes,
+  type ProgramExercise,
+  type TrainingProgram,
+} from "../lib/fitnessData";
+import {
+  deleteProgramFromSupabase,
+  loadProgramsFromSupabase,
+  saveProgramToSupabase,
+  updateProgramInSupabase,
+} from "../lib/supabasePlanning";
+import { supabase } from "../lib/supabaseClient";
+
+export default function ProgramsPage() {
+  const [programs, setPrograms] = useState<TrainingProgram[]>([]);
+  const [name, setName] = useState("");
+  const [splitType, setSplitType] = useState(splitTypes[0]);
+  const [daysPerWeek, setDaysPerWeek] = useState("4");
+  const [notes, setNotes] = useState("");
+  const [exercise, setExercise] = useState("Bench Press");
+  const [muscleGroup, setMuscleGroup] = useState("Chest");
+  const [sets, setSets] = useState("3");
+  const [reps, setReps] = useState("8-12");
+  const [exerciseNotes, setExerciseNotes] = useState("");
+  const [draftExercises, setDraftExercises] = useState<ProgramExercise[]>([]);
+  const [userId, setUserId] = useState("");
+  const [programMessage, setProgramMessage] = useState("");
+  const [hasLoadedPrograms, setHasLoadedPrograms] = useState(false);
+  const [editingProgramId, setEditingProgramId] = useState<string | number | null>(
+    null
+  );
+
+  useEffect(() => {
+    let shouldIgnore = false;
+
+    async function loadPrograms() {
+      const { data } = await supabase.auth.getUser();
+      const currentUserId = data.user?.id ?? "";
+
+      if (shouldIgnore) {
+        return;
+      }
+
+      setUserId(currentUserId);
+
+      if (!currentUserId) {
+        setPrograms(loadTrainingPrograms());
+        setHasLoadedPrograms(true);
+        setProgramMessage(
+          "Log in to sync programs to Supabase. Programs are saved on this device."
+        );
+        return;
+      }
+
+      try {
+        const savedPrograms = await loadProgramsFromSupabase();
+        if (!shouldIgnore) {
+          setPrograms(savedPrograms);
+          setHasLoadedPrograms(true);
+          setProgramMessage("Programs are syncing with Supabase.");
+        }
+      } catch {
+        if (!shouldIgnore) {
+          setPrograms(loadTrainingPrograms());
+          setHasLoadedPrograms(true);
+          setProgramMessage("Could not load programs from Supabase. Showing this device.");
+        }
+      }
+    }
+
+    loadPrograms();
+
+    return () => {
+      shouldIgnore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedPrograms) {
+      return;
+    }
+
+    saveTrainingPrograms(programs);
+  }, [programs, hasLoadedPrograms]);
+
+  function chooseExercise(exerciseName: string) {
+    setExercise(exerciseName);
+
+    const libraryExercise = exerciseLibrary.find(
+      (item) => item.exercise === exerciseName
+    );
+
+    if (libraryExercise) {
+      setMuscleGroup(libraryExercise.muscleGroup);
+      setSets(libraryExercise.defaultSets);
+      setReps(libraryExercise.defaultReps);
+    }
+  }
+
+  function addExerciseToDraft() {
+    if (!exercise) {
+      return;
+    }
+
+    setDraftExercises([
+      ...draftExercises,
+      {
+        id: Date.now(),
+        exercise,
+        muscleGroup,
+        sets,
+        reps,
+        notes: exerciseNotes,
+      },
+    ]);
+    setExerciseNotes("");
+  }
+
+  function removeDraftExercise(id: string | number) {
+    setDraftExercises(
+      draftExercises.filter((draftExercise) => draftExercise.id !== id)
+    );
+  }
+
+  function updateDraftExercise(
+    id: string | number,
+    field: keyof ProgramExercise,
+    value: string
+  ) {
+    setDraftExercises(
+      draftExercises.map((draftExercise) =>
+        draftExercise.id === id
+          ? {
+              ...draftExercise,
+              [field]: value,
+            }
+          : draftExercise
+      )
+    );
+  }
+
+  function resetProgramForm() {
+    setName("");
+    setSplitType(splitTypes[0]);
+    setDaysPerWeek("4");
+    setNotes("");
+    setDraftExercises([]);
+    setEditingProgramId(null);
+  }
+
+  function editProgram(program: TrainingProgram) {
+    setEditingProgramId(program.id);
+    setName(program.name);
+    setSplitType(program.splitType);
+    setDaysPerWeek(program.daysPerWeek);
+    setNotes(program.notes);
+    setDraftExercises(program.exercises);
+    setProgramMessage("Editing " + program.name + ".");
+  }
+
+  async function saveProgram(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (draftExercises.length === 0) {
+      return;
+    }
+
+    const newProgram = {
+      id: editingProgramId ?? Date.now(),
+      name,
+      splitType,
+      daysPerWeek,
+      notes,
+      exercises: draftExercises,
+    };
+
+    if (editingProgramId) {
+      if (userId) {
+        try {
+          const updatedProgram = await updateProgramInSupabase(newProgram);
+          setPrograms(
+            programs.map((program) =>
+              program.id === editingProgramId ? updatedProgram : program
+            )
+          );
+          setProgramMessage("Program updated in Supabase.");
+        } catch {
+          setProgramMessage("Could not update program in Supabase. Try again.");
+          return;
+        }
+      } else {
+        setPrograms(
+          programs.map((program) =>
+            program.id === editingProgramId ? newProgram : program
+          )
+        );
+        setProgramMessage("Program updated on this device.");
+      }
+
+      resetProgramForm();
+      return;
+    }
+
+    if (userId) {
+      try {
+        const savedProgram = await saveProgramToSupabase(newProgram);
+        setPrograms([savedProgram, ...programs]);
+        setProgramMessage("Program saved to Supabase.");
+      } catch {
+        setProgramMessage("Could not save program to Supabase. Try again.");
+        return;
+      }
+    } else {
+      setPrograms([newProgram, ...programs]);
+      setProgramMessage("Program saved on this device.");
+    }
+
+    resetProgramForm();
+  }
+
+  async function deleteProgram(id: string | number) {
+    setPrograms(programs.filter((program) => program.id !== id));
+
+    if (!userId) {
+      return;
+    }
+
+    try {
+      await deleteProgramFromSupabase(id);
+      setProgramMessage("Program deleted from Supabase.");
+    } catch {
+      setProgramMessage("Could not delete program from Supabase.");
+    }
+  }
+
+  return (
+    <main className="min-h-screen p-4 sm:p-6">
+      <section className="mx-auto max-w-6xl">
+        <div className="mb-8">
+          <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-400">
+            Programs
+          </p>
+          <h1 className="mb-3 text-3xl font-bold sm:text-4xl">
+            Workout Program Builder
+          </h1>
+          <p className="max-w-3xl text-gray-300">
+            Build reusable training programs with split type, weekly schedule,
+            exercises, sets, reps, and notes.
+          </p>
+        </div>
+
+        <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
+          <CollapsibleSection
+            title={editingProgramId ? "Edit Program" : "Create Program"}
+            description={
+              editingProgramId
+                ? "Update the plan details, exercises, sets, reps, and notes."
+                : "Start with a split, then add exercises into the plan."
+            }
+          >
+            {programMessage && (
+              <p className="mb-4 rounded-md border border-gray-800 bg-gray-950 p-3 text-sm text-gray-300">
+                {programMessage}
+              </p>
+            )}
+            <form onSubmit={saveProgram} className="space-y-4">
+              <div>
+                <label htmlFor="program-name" className="mb-1 block text-sm text-gray-300">
+                  Program Name
+                </label>
+                <input
+                  id="program-name"
+                  name="program-name"
+                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Summer Hypertrophy Block"
+                  required
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="split-type" className="mb-1 block text-sm text-gray-300">
+                    Split Type
+                  </label>
+                  <select
+                    id="split-type"
+                    name="split-type"
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={splitType}
+                    onChange={(event) => setSplitType(event.target.value)}
+                  >
+                    {splitTypes.map((split) => (
+                      <option key={split} value={split}>
+                        {split}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="days-per-week" className="mb-1 block text-sm text-gray-300">
+                    Days Per Week
+                  </label>
+                  <input
+                    id="days-per-week"
+                    name="days-per-week"
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    type="number"
+                    min="1"
+                    max="7"
+                    value={daysPerWeek}
+                    onChange={(event) => setDaysPerWeek(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="program-notes" className="mb-1 block text-sm text-gray-300">
+                  Program Notes
+                </label>
+                <textarea
+                  id="program-notes"
+                  name="program-notes"
+                  className="min-h-24 w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Focus on controlled reps and adding load slowly."
+                />
+              </div>
+
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                <h2 className="mb-3 font-semibold">Add Exercise</h2>
+                <div className="grid gap-3">
+                  <select
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={exercise}
+                    onChange={(event) => chooseExercise(event.target.value)}
+                  >
+                    {exerciseLibrary.map((libraryExercise) => (
+                      <option key={libraryExercise.exercise} value={libraryExercise.exercise}>
+                        {libraryExercise.exercise}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={muscleGroup}
+                    onChange={(event) => setMuscleGroup(event.target.value)}
+                  >
+                    {muscleGroups.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={sets}
+                      onChange={(event) => setSets(event.target.value)}
+                      placeholder="Sets"
+                    />
+                    <input
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={reps}
+                      onChange={(event) => setReps(event.target.value)}
+                      placeholder="Reps"
+                    />
+                  </div>
+
+                  <input
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={exerciseNotes}
+                    onChange={(event) => setExerciseNotes(event.target.value)}
+                    placeholder="Exercise notes"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={addExerciseToDraft}
+                    className="rounded-md bg-blue-600 px-4 py-3 font-semibold hover:bg-blue-500"
+                  >
+                    Add Exercise To Program
+                  </button>
+                </div>
+              </div>
+
+              {draftExercises.length > 0 && (
+                <div className="space-y-2">
+                  {draftExercises.map((draftExercise) => (
+                    <div
+                      key={draftExercise.id}
+                      className="rounded-md border border-gray-800 bg-gray-950 p-3"
+                    >
+                      <div className="grid gap-3">
+                        <input
+                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                          value={draftExercise.exercise}
+                          onChange={(event) =>
+                            updateDraftExercise(
+                              draftExercise.id,
+                              "exercise",
+                              event.target.value
+                            )
+                          }
+                          aria-label="Program exercise name"
+                        />
+                        <select
+                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                          value={draftExercise.muscleGroup}
+                          onChange={(event) =>
+                            updateDraftExercise(
+                              draftExercise.id,
+                              "muscleGroup",
+                              event.target.value
+                            )
+                          }
+                          aria-label="Program exercise muscle group"
+                        >
+                          {muscleGroups.map((group) => (
+                            <option key={group} value={group}>
+                              {group}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <input
+                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                            value={draftExercise.sets}
+                            onChange={(event) =>
+                              updateDraftExercise(
+                                draftExercise.id,
+                                "sets",
+                                event.target.value
+                              )
+                            }
+                            aria-label="Program exercise sets"
+                          />
+                          <input
+                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                            value={draftExercise.reps}
+                            onChange={(event) =>
+                              updateDraftExercise(
+                                draftExercise.id,
+                                "reps",
+                                event.target.value
+                              )
+                            }
+                            aria-label="Program exercise reps"
+                          />
+                        </div>
+                        <input
+                          className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                          value={draftExercise.notes}
+                          onChange={(event) =>
+                            updateDraftExercise(
+                              draftExercise.id,
+                              "notes",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Exercise notes"
+                          aria-label="Program exercise notes"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDraftExercise(draftExercise.id)}
+                        className="mt-3 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={draftExercises.length === 0}
+                className="w-full rounded-md bg-green-600 p-3 font-semibold hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+              >
+                {editingProgramId ? "Save Program Changes" : "Save Program"}
+              </button>
+
+              {editingProgramId && (
+                <button
+                  type="button"
+                  onClick={resetProgramForm}
+                  className="w-full rounded-md bg-white/10 p-3 font-semibold hover:bg-white/15"
+                >
+                  Cancel Edit
+                </button>
+              )}
+            </form>
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Saved Programs">
+            {programs.length === 0 ? (
+              <EmptyState
+                title="No programs saved yet"
+                description="Create a reusable training plan so future workouts have structure before you start logging."
+              />
+            ) : (
+              <div className="space-y-4">
+                {programs.map((program) => (
+                  <article
+                    key={program.id}
+                    className="rounded-lg border border-gray-800 bg-gray-950 p-4"
+                  >
+                    <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h2 className="text-xl font-semibold">{program.name}</h2>
+                        <p className="text-sm text-gray-400">
+                          {program.splitType} · {program.daysPerWeek} days/week
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Link
+                          href={`/add-workout?programId=${program.id}`}
+                          className="rounded-md bg-green-600 px-3 py-2 text-center text-sm font-semibold hover:bg-green-500"
+                        >
+                          Start Workout
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => editProgram(program)}
+                          className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold hover:bg-blue-500"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteProgram(program.id)}
+                          className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    {program.notes && (
+                      <p className="mb-3 text-sm text-gray-300">{program.notes}</p>
+                    )}
+                    <div className="space-y-2">
+                      {program.exercises.map((programExercise) => (
+                        <div
+                          key={programExercise.id}
+                          className="rounded-md border border-gray-800 bg-gray-900 p-3"
+                        >
+                          <p className="font-semibold">{programExercise.exercise}</p>
+                          <p className="text-sm text-gray-400">
+                            {programExercise.muscleGroup} · {programExercise.sets} x{" "}
+                            {programExercise.reps}
+                          </p>
+                          {programExercise.notes && (
+                            <p className="mt-1 text-sm text-gray-300">
+                              {programExercise.notes}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </CollapsibleSection>
+        </div>
+      </section>
+    </main>
+  );
+}
