@@ -57,6 +57,7 @@ Run the SQL files in the Supabase SQL Editor:
 ```txt
 supabase/add-exercise-notes.sql
 supabase/add-goals-programs.sql
+supabase/add-program-sharing.sql
 ```
 
 The app also expects the existing workout, exercise, set, profile, and custom exercise tables/policies created during development.
@@ -69,6 +70,7 @@ The app also expects the existing workout, exercise, set, profile, and custom ex
 - Run `npm run lint`.
 - Run `npm run build`.
 - Test the main flow: sign in, create program, start workout, save workout, edit goal, view dashboard.
+- Test sharing: create a program, share it to another account email, then confirm that account can save a copy.
 - After deployment, test mobile install: Safari Share -> Add to Home Screen, or Chrome menu -> Install app.
 
 ## Resume Summary

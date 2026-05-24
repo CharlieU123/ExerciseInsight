@@ -1,5 +1,10 @@
 import { supabase } from "./supabaseClient";
-import type { FitnessGoal, ProgramExercise, TrainingProgram } from "./fitnessData";
+import type {
+  FitnessGoal,
+  ProgramExercise,
+  SharedTrainingProgram,
+  TrainingProgram,
+} from "./fitnessData";
 
 type SupabaseGoalRow = {
   id: string;
@@ -22,11 +27,20 @@ type SupabaseProgramExerciseRow = {
 
 type SupabaseProgramRow = {
   id: string;
+  user_id?: string;
   name: string;
   split_type: string;
   days_per_week: string;
   notes: string;
   program_exercises: SupabaseProgramExerciseRow[];
+};
+
+type SupabaseProgramShareRow = {
+  id: string;
+  owner_id: string;
+  shared_with_email: string;
+  permission: "view" | "edit";
+  training_programs: SupabaseProgramRow | SupabaseProgramRow[] | null;
 };
 
 async function getCurrentUserId() {
@@ -67,6 +81,26 @@ function mapProgramFromSupabase(row: SupabaseProgramRow): TrainingProgram {
     daysPerWeek: row.days_per_week,
     notes: row.notes,
     exercises: row.program_exercises.map(mapProgramExerciseFromSupabase),
+  };
+}
+
+function mapSharedProgramFromSupabase(
+  row: SupabaseProgramShareRow
+): SharedTrainingProgram | null {
+  const programRow = Array.isArray(row.training_programs)
+    ? row.training_programs[0]
+    : row.training_programs;
+
+  if (!programRow) {
+    return null;
+  }
+
+  return {
+    ...mapProgramFromSupabase(programRow),
+    shareId: row.id,
+    ownerId: row.owner_id,
+    sharedWithEmail: row.shared_with_email,
+    permission: row.permission,
   };
 }
 
@@ -168,6 +202,70 @@ export async function loadProgramsFromSupabase() {
   }
 
   return (data as SupabaseProgramRow[]).map(mapProgramFromSupabase);
+}
+
+export async function loadSharedProgramsFromSupabase() {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("program_shares")
+    .select(
+      "id, owner_id, shared_with_email, permission, training_programs(id, user_id, name, split_type, days_per_week, notes, program_exercises(id, exercise, muscle_group, sets, reps, notes))"
+    )
+    .order("created_at", { ascending: false });
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Could not load shared programs.");
+  }
+
+  return (data as SupabaseProgramShareRow[])
+    .map(mapSharedProgramFromSupabase)
+    .filter((program): program is SharedTrainingProgram => Boolean(program));
+}
+
+export async function shareProgramToSupabase(
+  programId: string | number,
+  sharedWithEmail: string,
+  permission: "view" | "edit"
+) {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    throw new Error("You must be logged in to share programs.");
+  }
+
+  const { error } = await supabase.from("program_shares").insert({
+    program_id: String(programId),
+    owner_id: userId,
+    shared_with_email: sharedWithEmail.trim().toLowerCase(),
+    permission,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function saveSharedProgramCopyToSupabase(
+  sharedProgram: SharedTrainingProgram
+) {
+  return saveProgramToSupabase({
+    id: Date.now(),
+    name: sharedProgram.name + " Copy",
+    splitType: sharedProgram.splitType,
+    daysPerWeek: sharedProgram.daysPerWeek,
+    notes: sharedProgram.notes
+      ? "Copied from a shared program. " + sharedProgram.notes
+      : "Copied from a shared program.",
+    exercises: sharedProgram.exercises.map((exercise, index) => ({
+      ...exercise,
+      id: Date.now() + index,
+    })),
+  });
 }
 
 export async function saveProgramToSupabase(program: TrainingProgram) {

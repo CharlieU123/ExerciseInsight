@@ -11,18 +11,23 @@ import {
   saveTrainingPrograms,
   splitTypes,
   type ProgramExercise,
+  type SharedTrainingProgram,
   type TrainingProgram,
 } from "../lib/fitnessData";
 import {
   deleteProgramFromSupabase,
   loadProgramsFromSupabase,
+  loadSharedProgramsFromSupabase,
   saveProgramToSupabase,
+  saveSharedProgramCopyToSupabase,
+  shareProgramToSupabase,
   updateProgramInSupabase,
 } from "../lib/supabasePlanning";
 import { supabase } from "../lib/supabaseClient";
 
 export default function ProgramsPage() {
   const [programs, setPrograms] = useState<TrainingProgram[]>([]);
+  const [sharedPrograms, setSharedPrograms] = useState<SharedTrainingProgram[]>([]);
   const [name, setName] = useState("");
   const [splitType, setSplitType] = useState(splitTypes[0]);
   const [daysPerWeek, setDaysPerWeek] = useState("4");
@@ -35,6 +40,12 @@ export default function ProgramsPage() {
   const [draftExercises, setDraftExercises] = useState<ProgramExercise[]>([]);
   const [userId, setUserId] = useState("");
   const [programMessage, setProgramMessage] = useState("");
+  const [shareEmailByProgram, setShareEmailByProgram] = useState<Record<string, string>>(
+    {}
+  );
+  const [sharePermissionByProgram, setSharePermissionByProgram] = useState<
+    Record<string, "view" | "edit">
+  >({});
   const [hasLoadedPrograms, setHasLoadedPrograms] = useState(false);
   const [editingProgramId, setEditingProgramId] = useState<string | number | null>(
     null
@@ -63,9 +74,13 @@ export default function ProgramsPage() {
       }
 
       try {
-        const savedPrograms = await loadProgramsFromSupabase();
+        const [savedPrograms, savedSharedPrograms] = await Promise.all([
+          loadProgramsFromSupabase(),
+          loadSharedProgramsFromSupabase(),
+        ]);
         if (!shouldIgnore) {
           setPrograms(savedPrograms);
+          setSharedPrograms(savedSharedPrograms);
           setHasLoadedPrograms(true);
           setProgramMessage("Programs are syncing with Supabase.");
         }
@@ -240,6 +255,48 @@ export default function ProgramsPage() {
       setProgramMessage("Program deleted from Supabase.");
     } catch {
       setProgramMessage("Could not delete program from Supabase.");
+    }
+  }
+
+  async function shareProgram(program: TrainingProgram) {
+    const programKey = String(program.id);
+    const email = shareEmailByProgram[programKey]?.trim().toLowerCase() ?? "";
+    const permission = sharePermissionByProgram[programKey] ?? "view";
+
+    if (!userId) {
+      setProgramMessage("Log in to share programs.");
+      return;
+    }
+
+    if (!email.includes("@")) {
+      setProgramMessage("Enter the email address for the person you want to share with.");
+      return;
+    }
+
+    try {
+      await shareProgramToSupabase(program.id, email, permission);
+      setShareEmailByProgram({
+        ...shareEmailByProgram,
+        [programKey]: "",
+      });
+      setProgramMessage(program.name + " shared with " + email + ".");
+    } catch {
+      setProgramMessage("Could not share that program. Check the SQL setup and try again.");
+    }
+  }
+
+  async function saveSharedProgramCopy(program: SharedTrainingProgram) {
+    if (!userId) {
+      setProgramMessage("Log in to save a shared program copy.");
+      return;
+    }
+
+    try {
+      const copiedProgram = await saveSharedProgramCopyToSupabase(program);
+      setPrograms([copiedProgram, ...programs]);
+      setProgramMessage(program.name + " was saved as your own editable copy.");
+    } catch {
+      setProgramMessage("Could not save a copy of that shared program.");
     }
   }
 
@@ -552,6 +609,49 @@ export default function ProgramsPage() {
                         </button>
                       </div>
                     </div>
+                    {userId && (
+                      <div className="mb-3 rounded-md border border-gray-800 bg-gray-900 p-3">
+                        <p className="mb-2 text-sm font-semibold text-gray-200">
+                          Share Program
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                          <input
+                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm"
+                            type="email"
+                            value={shareEmailByProgram[String(program.id)] ?? ""}
+                            onChange={(event) =>
+                              setShareEmailByProgram({
+                                ...shareEmailByProgram,
+                                [String(program.id)]: event.target.value,
+                              })
+                            }
+                            placeholder="client@example.com"
+                            aria-label={"Email to share " + program.name}
+                          />
+                          <select
+                            className="rounded-md border border-gray-700 bg-gray-950 p-3 text-sm"
+                            value={sharePermissionByProgram[String(program.id)] ?? "view"}
+                            onChange={(event) =>
+                              setSharePermissionByProgram({
+                                ...sharePermissionByProgram,
+                                [String(program.id)]: event.target.value as "view" | "edit",
+                              })
+                            }
+                            aria-label={"Sharing permission for " + program.name}
+                          >
+                            <option value="view">View only</option>
+                            <option value="edit">Can copy/edit</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => shareProgram(program)}
+                            className="rounded-md bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15"
+                          >
+                            Share
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {program.notes && (
                       <p className="mb-3 text-sm text-gray-300">{program.notes}</p>
                     )}
@@ -579,6 +679,71 @@ export default function ProgramsPage() {
               </div>
             )}
           </CollapsibleSection>
+
+          {userId && (
+            <CollapsibleSection
+              title="Shared With Me"
+              description="Programs shared to your account email appear here. Save a copy to make it your own."
+            >
+              {sharedPrograms.length === 0 ? (
+                <EmptyState
+                  title="No shared programs yet"
+                  description="When a coach or friend shares a program to your login email, it will show up here."
+                />
+              ) : (
+                <div className="space-y-4">
+                  {sharedPrograms.map((program) => (
+                    <article
+                      key={program.shareId}
+                      className="rounded-lg border border-gray-800 bg-gray-950 p-4"
+                    >
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-blue-400">
+                            Shared Program
+                          </p>
+                          <h2 className="text-xl font-semibold">{program.name}</h2>
+                          <p className="text-sm text-gray-400">
+                            {program.splitType} · {program.daysPerWeek} days/week ·{" "}
+                            {program.permission === "edit" ? "Copy/edit allowed" : "View only"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => saveSharedProgramCopy(program)}
+                          className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold hover:bg-green-500"
+                        >
+                          Save Copy
+                        </button>
+                      </div>
+                      {program.notes && (
+                        <p className="mb-3 text-sm text-gray-300">{program.notes}</p>
+                      )}
+                      <div className="space-y-2">
+                        {program.exercises.map((programExercise) => (
+                          <div
+                            key={programExercise.id}
+                            className="rounded-md border border-gray-800 bg-gray-900 p-3"
+                          >
+                            <p className="font-semibold">{programExercise.exercise}</p>
+                            <p className="text-sm text-gray-400">
+                              {programExercise.muscleGroup} · {programExercise.sets} x{" "}
+                              {programExercise.reps}
+                            </p>
+                            {programExercise.notes && (
+                              <p className="mt-1 text-sm text-gray-300">
+                                {programExercise.notes}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </CollapsibleSection>
+          )}
         </div>
       </section>
     </main>
