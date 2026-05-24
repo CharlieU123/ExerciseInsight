@@ -16,6 +16,7 @@ ExerciseInsight is a full-stack fitness tracking app built with Next.js, TypeScr
 - Previous-performance hints while logging workouts
 - Progress dashboard with recovery and deload recommendations
 - Dark/light mode and accent color settings
+- Installable PWA support for phone home screens
 - Local device fallback when logged out
 
 ## Tech Stack
@@ -68,6 +69,7 @@ The app also expects the existing workout, exercise, set, profile, and custom ex
 - Run `npm run lint`.
 - Run `npm run build`.
 - Test the main flow: sign in, create program, start workout, save workout, edit goal, view dashboard.
+- After deployment, test mobile install: Safari Share -> Add to Home Screen, or Chrome menu -> Install app.
 
 ## Resume Summary
 
