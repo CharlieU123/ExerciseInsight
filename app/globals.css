@@ -15,6 +15,8 @@
   --accent-card: color-mix(in srgb, var(--accent) 10%, var(--surface-soft));
   --accent-border: color-mix(in srgb, var(--accent) 34%, var(--border));
   --accent-ring: color-mix(in srgb, var(--accent) 28%, transparent);
+  --premium-shadow: 0 18px 44px rgba(0, 0, 0, 0.24);
+  --premium-shadow-hover: 0 24px 60px color-mix(in srgb, var(--accent) 18%, rgba(0, 0, 0, 0.42));
 }
 
 :root[data-theme="light"] {
@@ -45,8 +47,20 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+* {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    filter 180ms ease,
+    transform 180ms ease;
+}
+
 [class~="bg-gray-950"] {
-  background-color: var(--surface-strong) !important;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 5%, var(--surface-strong)), var(--surface-strong) 70%),
+    var(--surface-strong) !important;
 }
 
 [class~="bg-gray-950/85"] {
@@ -58,7 +72,10 @@ body {
 [class~="bg-gray-900/80"] {
   background:
     linear-gradient(135deg, var(--accent-card), var(--surface-soft) 58%),
+    radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 10%, transparent), transparent 18rem),
     var(--surface-soft) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--premium-shadow);
 }
 
 [class~="bg-gray-800"] {
@@ -68,12 +85,20 @@ body {
 [class~="bg-white/5"],
 [class~="bg-white/10"] {
   background-color: color-mix(in srgb, var(--accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent) !important;
 }
 
 [class~="border-gray-700"],
 [class~="border-gray-800"],
 [class~="border-white/10"] {
   border-color: var(--accent-border) !important;
+}
+
+[class~="rounded-lg"][class*="border"],
+[class~="rounded-md"][class*="border"] {
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 8%, transparent) inset,
+    0 14px 34px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 [class~="text-white"],
@@ -100,12 +125,15 @@ body {
 [class~="bg-green-600"] {
   background:
     linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, black)) !important;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent-hover) 35%, transparent) inset,
+    0 14px 30px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 [class~="hover:bg-blue-500"]:hover,
 [class~="hover:bg-green-500"]:hover {
   background-color: var(--accent-hover) !important;
+  transform: translateY(-1px);
 }
 
 [class~="border-blue-400/30"],
@@ -126,6 +154,7 @@ textarea {
   border-color: var(--border);
   color: var(--foreground);
   accent-color: var(--accent);
+  box-shadow: 0 1px 0 color-mix(in srgb, white 7%, transparent) inset;
 }
 
 input:focus,
@@ -142,11 +171,54 @@ summary:hover {
 
 header {
   border-bottom-color: var(--accent-border) !important;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 16px 44px color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.22));
 }
 
 header img,
 header svg {
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 35%, transparent));
+}
+
+a:hover,
+button:hover,
+summary:hover {
+  transform: translateY(-1px);
+}
+
+a:active,
+button:active {
+  transform: translateY(0);
+}
+
+main > section > div[class*="rounded-lg"]:first-child {
+  position: relative;
+  overflow: hidden;
+}
+
+main > section > div[class*="rounded-lg"]:first-child::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+    radial-gradient(circle at 86% 10%, color-mix(in srgb, var(--accent-hover) 18%, transparent), transparent 18rem);
+}
+
+main > section > div[class*="rounded-lg"]:first-child > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  a:hover,
+  button:hover,
+  summary:hover {
+    transition: none !important;
+    transform: none !important;
+  }
 }
 
 ::placeholder {
@@ -163,7 +235,7 @@ header svg {
 :root[data-theme="light"] header {
   background: rgba(255, 255, 255, 0.96) !important;
   color: var(--foreground) !important;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--accent) 12%, rgba(15, 23, 42, 0.08));
 }
 
 :root[data-theme="light"] [class~="bg-gray-900"],
@@ -172,6 +244,7 @@ header svg {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, white), #ffffff 62%),
     #ffffff !important;
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 10%, rgba(15, 23, 42, 0.08));
 }
 
 :root[data-theme="light"] [class~="bg-gray-950"] {
@@ -250,7 +323,7 @@ header svg {
 }
 
 :root[data-theme="light"] [class~="shadow-xl"] {
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 18px 45px color-mix(in srgb, var(--accent) 10%, rgba(15, 23, 42, 0.08)) !important;
 }
 
 :root[data-theme="light"] [class~="shadow-blue-950/30"],
