@@ -6,6 +6,8 @@ import { CollapsibleSection } from "./components/CollapsibleSection";
 import { EmptyState } from "./components/EmptyState";
 import {
   getDeloadRecommendation,
+  getProgramDays,
+  getSmartCoachInsight,
   isWorkoutThisWeek,
   loadFitnessGoals,
   loadProfile,
@@ -117,6 +119,10 @@ export default function HomePage() {
   const activeGoalProgress = getGoalProgress(activeGoal);
   const currentProgram = programs[0];
   const deloadRecommendation = getDeloadRecommendation(workouts);
+  const smartCoachInsight = getSmartCoachInsight(workouts, goals, programs);
+  const currentProgramFirstDay = currentProgram
+    ? getProgramDays(currentProgram)[0]
+    : null;
   const isNewUser =
     workouts.length === 0 && goals.length === 0 && programs.length === 0;
 
@@ -145,7 +151,11 @@ export default function HomePage() {
             </Link>
             {currentProgram && (
               <Link
-                href={`/add-workout?programId=${currentProgram.id}`}
+                href={
+                  currentProgramFirstDay
+                    ? `/add-workout?programId=${currentProgram.id}&dayId=${currentProgramFirstDay.id}`
+                    : `/add-workout?programId=${currentProgram.id}`
+                }
                 className="rounded-md bg-green-600 px-4 py-3 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
               >
                 Start Current Program
@@ -288,10 +298,14 @@ export default function HomePage() {
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Link
-                      href={`/add-workout?programId=${currentProgram.id}`}
+                      href={
+                        currentProgramFirstDay
+                          ? `/add-workout?programId=${currentProgram.id}&dayId=${currentProgramFirstDay.id}`
+                          : `/add-workout?programId=${currentProgram.id}`
+                      }
                       className="rounded-md bg-green-600 px-3 py-2 text-center text-sm font-semibold hover:bg-green-500"
                     >
-                      Start Workout
+                      Start Day 1
                     </Link>
                     <Link
                       href="/programs"
@@ -302,20 +316,37 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {currentProgram.exercises.slice(0, 4).map((programExercise) => (
-                    <div
-                      key={programExercise.id}
-                      className="rounded-md border border-gray-800 bg-gray-900 p-3"
-                    >
-                      <p className="font-semibold">{programExercise.exercise}</p>
-                      <p className="text-sm text-gray-400">
-                        {programExercise.muscleGroup} · {programExercise.sets} x{" "}
-                        {programExercise.reps}
+                  {currentProgramFirstDay ? (
+                    <div className="rounded-md border border-gray-800 bg-gray-900 p-3">
+                      <p className="font-semibold">Day 1: {currentProgramFirstDay.name}</p>
+                      <p className="mt-1 text-sm text-gray-400">
+                        {currentProgramFirstDay.isRestDay
+                          ? "Rest day"
+                          : `${currentProgramFirstDay.exercises.length} planned exercises`}
                       </p>
+                      {currentProgramFirstDay.exercises.slice(0, 3).map((programExercise) => (
+                        <p key={programExercise.id} className="mt-2 text-sm text-gray-300">
+                          {programExercise.exercise} · {programExercise.sets} x{" "}
+                          {programExercise.reps}
+                        </p>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    currentProgram.exercises.slice(0, 4).map((programExercise) => (
+                      <div
+                        key={programExercise.id}
+                        className="rounded-md border border-gray-800 bg-gray-900 p-3"
+                      >
+                        <p className="font-semibold">{programExercise.exercise}</p>
+                        <p className="text-sm text-gray-400">
+                          {programExercise.muscleGroup} · {programExercise.sets} x{" "}
+                          {programExercise.reps}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
-                {currentProgram.exercises.length > 4 && (
+                {!currentProgramFirstDay && currentProgram.exercises.length > 4 && (
                   <p className="mt-3 text-sm text-gray-400">
                     +{currentProgram.exercises.length - 4} more exercises
                   </p>
@@ -371,25 +402,61 @@ export default function HomePage() {
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Training Insight"
-            description="A quick recovery read from recent workouts."
+            title="Smart Coach"
+            description="Rule-based coaching from your recent training data."
           >
             <div className="space-y-4">
               <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
-                <p className="text-sm text-gray-400">Recovery</p>
-                <h2 className="mt-1 text-2xl font-bold">
-                  {deloadRecommendation.action}
-                </h2>
-                <p className="mt-2 text-sm text-gray-300">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-gray-400">Recovery Score</p>
+                    <h2 className="mt-1 text-4xl font-bold">
+                      {smartCoachInsight.recoveryScore}
+                      <span className="text-lg text-gray-400">/100</span>
+                    </h2>
+                  </div>
+                  <span className="rounded-full bg-blue-950/40 px-3 py-1 text-xs font-semibold text-blue-300">
+                    {smartCoachInsight.confidence} confidence
+                  </span>
+                </div>
+                <div className="h-3 rounded-full bg-gray-900">
+                  <div
+                    className="h-3 rounded-full bg-blue-600"
+                    style={{ width: smartCoachInsight.recoveryScore + "%" }}
+                  />
+                </div>
+                <p className="mt-3 font-semibold">{smartCoachInsight.recoveryLabel}</p>
+                <p className="mt-1 text-sm text-gray-300">
                   {deloadRecommendation.detail}
                 </p>
               </div>
 
               <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
-                <p className="text-sm text-gray-400">Last Exercise</p>
-                <h2 className="mt-1 text-2xl font-bold">
+                <p className="text-sm text-gray-400">Next Recommendation</p>
+                <h2 className="mt-1 text-2xl font-bold">{deloadRecommendation.action}</h2>
+                <p className="mt-2 text-sm text-gray-300">{smartCoachInsight.nextMove}</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                  <p className="text-sm text-gray-400">Training Focus</p>
+                  <p className="mt-2 text-sm text-gray-300">
+                    {smartCoachInsight.trainingFocus}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                  <p className="text-sm text-gray-400">Program Guidance</p>
+                  <p className="mt-2 text-sm text-gray-300">
+                    {smartCoachInsight.programNote}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                <p className="text-sm text-gray-400">Last Exercise Snapshot</p>
+                <p className="mt-1 text-xl font-bold">
                   {lastExercise ? lastExercise.exercise : "None yet"}
-                </h2>
+                </p>
                 <p className="mt-2 text-sm text-gray-300">
                   {lastExercise
                     ? summarizeExerciseSets(lastExercise)

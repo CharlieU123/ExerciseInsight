@@ -45,6 +45,15 @@ export type DeloadRecommendation = {
   tone: "normal" | "watch" | "deload";
 };
 
+export type SmartCoachInsight = {
+  recoveryScore: number;
+  recoveryLabel: string;
+  nextMove: string;
+  trainingFocus: string;
+  programNote: string;
+  confidence: "Low" | "Medium" | "High";
+};
+
 export type ExerciseLibraryItem = {
   exercise: string;
   muscleGroup: string;
@@ -1063,5 +1072,79 @@ export function getDeloadRecommendation(workouts: Workout[]): DeloadRecommendati
     detail:
       "Recent soreness and workout feedback look manageable. Keep progressing normally.",
     tone: "normal",
+  };
+}
+
+export function getSmartCoachInsight(
+  workouts: Workout[],
+  goals: FitnessGoal[],
+  programs: TrainingProgram[]
+): SmartCoachInsight {
+  const recentWorkouts = workouts.slice(0, 5);
+  const recentExercises = recentWorkouts.flatMap((workout) => workout.exercises);
+  const recentSetEntries = recentExercises.flatMap(getExerciseSetEntries);
+  const activeGoal = goals.find((goal) => goal.status === "Active") ?? goals[0];
+  const currentProgram = programs[0];
+  const workoutsThisWeek = workouts.filter(isWorkoutThisWeek).length;
+  const hardSets = recentSetEntries.filter((setEntry) => Number(setEntry.rir) <= 1).length;
+  const highSorenessExercises = recentExercises.filter(
+    (exerciseEntry) => Number(exerciseEntry.soreness) >= 3
+  ).length;
+  const lowPumpExercises = recentExercises.filter(
+    (exerciseEntry) => Number(exerciseEntry.pump) <= 1
+  ).length;
+  const tiredWorkouts = recentWorkouts.filter((workout) =>
+    ["Tired", "Weak"].includes(workout.feeling)
+  ).length;
+
+  let recoveryScore = 88;
+  recoveryScore -= hardSets * 4;
+  recoveryScore -= highSorenessExercises * 10;
+  recoveryScore -= tiredWorkouts * 12;
+  recoveryScore += Math.min(workoutsThisWeek * 3, 9);
+  recoveryScore = Math.max(35, Math.min(98, recoveryScore));
+
+  const recoveryLabel =
+    recoveryScore >= 80
+      ? "Ready to progress"
+      : recoveryScore >= 65
+        ? "Train normally"
+        : recoveryScore >= 50
+          ? "Manage fatigue"
+          : "Back off today";
+
+  const nextMove =
+    recentWorkouts.length === 0
+      ? "Log your first workout so Smart Coach can start reading your training patterns."
+      : recoveryScore < 55
+        ? "Keep today's session lighter: reduce load slightly or remove 1 set from hard movements."
+        : hardSets >= 4
+          ? "Repeat your last hard lifts before adding weight. You were close to failure often."
+          : lowPumpExercises >= 3
+            ? "Add 1 set to a low-pump muscle group or slow the tempo on isolation work."
+            : "If your next session feels good, add a small amount of weight to one main lift.";
+
+  const trainingFocus = activeGoal
+    ? "Current focus: " + activeGoal.title + ". Keep logging workouts that support this goal."
+    : currentProgram
+      ? "Current focus: stay consistent with " + currentProgram.name + "."
+      : "Current focus: create a goal or program so recommendations can become more specific.";
+
+  const programNote = currentProgram
+    ? "Program loaded: " +
+      currentProgram.name +
+      ". Start one training day at a time and compare feedback after each session."
+    : "Build a program to unlock better day-by-day guidance.";
+
+  const confidence =
+    recentWorkouts.length >= 5 ? "High" : recentWorkouts.length >= 2 ? "Medium" : "Low";
+
+  return {
+    recoveryScore,
+    recoveryLabel,
+    nextMove,
+    trainingFocus,
+    programNote,
+    confidence,
   };
 }
