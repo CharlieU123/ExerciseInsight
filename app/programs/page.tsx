@@ -872,6 +872,12 @@ export default function ProgramsPage() {
                             </p>
                           ) : (
                             <div className="space-y-2">
+                              <Link
+                                href={`/add-workout?programId=${program.id}&dayId=${day.id}`}
+                                className="inline-flex rounded-md bg-green-600 px-3 py-2 text-sm font-semibold hover:bg-green-500"
+                              >
+                                Start Day {index + 1}
+                              </Link>
                               {day.exercises.map((programExercise) => (
                                 <div
                                   key={programExercise.id}

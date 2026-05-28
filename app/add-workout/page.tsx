@@ -8,6 +8,7 @@ import { SpeechToTextButton } from "../components/SpeechToTextButton";
 import {
   exerciseLibrary,
   buildSetEntries,
+  getProgramDays,
   loadWorkouts,
   loadTrainingPrograms,
   muscleGroups,
@@ -254,7 +255,9 @@ export default function AddWorkoutPage() {
       return;
     }
 
-    const programId = new URLSearchParams(window.location.search).get("programId");
+    const searchParams = new URLSearchParams(window.location.search);
+    const programId = searchParams.get("programId");
+    const dayId = searchParams.get("dayId");
 
     if (!programId) {
       return;
@@ -285,16 +288,34 @@ export default function AddWorkoutPage() {
         return;
       }
 
-      const programExercises = program.exercises.map(programExerciseToWorkoutExercise);
+      const programDays = getProgramDays(program);
+      const selectedDay =
+        programDays.find((day) => String(day.id) === String(dayId)) ?? programDays[0];
+
+      if (!selectedDay) {
+        setSaveMessage("Could not find a training day for that program.");
+        setLoadedProgramId(selectedProgramId);
+        return;
+      }
+
+      const programExercises = selectedDay.exercises.map(programExerciseToWorkoutExercise);
 
       setCurrentExercises(programExercises);
       setSelectedTemplate("");
       setNotes(
-        program.notes
-          ? "Started from " + program.name + ". " + program.notes
-          : "Started from " + program.name + "."
+        [
+          "Started from " + program.name + " - " + selectedDay.name + ".",
+          selectedDay.notes,
+          program.notes,
+        ]
+          .filter(Boolean)
+          .join(" ")
       );
-      setSaveMessage("Loaded " + program.name + " into the current workout.");
+      setSaveMessage(
+        selectedDay.exercises.length > 0
+          ? "Loaded " + program.name + " - " + selectedDay.name + "."
+          : program.name + " - " + selectedDay.name + " is a rest day or has no exercises."
+      );
       setLoadedProgramId(selectedProgramId);
     }
 
