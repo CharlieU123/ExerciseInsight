@@ -141,7 +141,7 @@ export default function HomePage() {
               href="/add-workout"
               className="rounded-md bg-blue-600 px-4 py-3 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
             >
-              Build Workout
+              Add Workout
             </Link>
             {currentProgram && (
               <Link
@@ -415,7 +415,7 @@ export default function HomePage() {
                 title="No workouts saved yet"
                 description="Build your first workout session to start filling the dashboard with useful training data."
                 actionHref="/add-workout"
-                actionLabel="Build Workout"
+                actionLabel="Add Workout"
               />
             ) : (
               <div className="space-y-3">
