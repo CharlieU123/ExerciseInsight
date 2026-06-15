@@ -1085,7 +1085,6 @@ export function getSmartCoachInsight(
   const recentSetEntries = recentExercises.flatMap(getExerciseSetEntries);
   const activeGoal = goals.find((goal) => goal.status === "Active") ?? goals[0];
   const currentProgram = programs[0];
-  const workoutsThisWeek = workouts.filter(isWorkoutThisWeek).length;
   const hardSets = recentSetEntries.filter((setEntry) => Number(setEntry.rir) <= 1).length;
   const highSorenessExercises = recentExercises.filter(
     (exerciseEntry) => Number(exerciseEntry.soreness) >= 3
@@ -1097,12 +1096,22 @@ export function getSmartCoachInsight(
     ["Tired", "Weak"].includes(workout.feeling)
   ).length;
 
+  const lastWorkoutDate = recentWorkouts[0]?.date
+    ? new Date(recentWorkouts[0].date)
+    : null;
+  const daysSinceLastWorkout =
+    lastWorkoutDate && !Number.isNaN(lastWorkoutDate.getTime())
+      ? Math.floor(
+          (Date.now() - lastWorkoutDate.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      : 0;
+
   let recoveryScore = 88;
   recoveryScore -= hardSets * 4;
   recoveryScore -= highSorenessExercises * 10;
   recoveryScore -= tiredWorkouts * 12;
-  recoveryScore += Math.min(workoutsThisWeek * 3, 9);
-  recoveryScore = Math.max(35, Math.min(98, recoveryScore));
+  recoveryScore += Math.min(daysSinceLastWorkout * 12, 36);
+  recoveryScore = Math.max(20, Math.min(98, recoveryScore));
 
   const recoveryLabel =
     recoveryScore >= 80
