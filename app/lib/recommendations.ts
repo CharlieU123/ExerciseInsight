@@ -13,6 +13,53 @@ import {
   getExerciseSetEntries,
 } from "./workoutUtils";
 
+const millisecondsPerDay = 1000 * 60 * 60 * 24;
+
+function getWorkoutDate(workout: Workout) {
+  const workoutDate = workout.dateISO || workout.date;
+
+  if (!workoutDate) {
+    return null;
+  }
+
+  const parsedDate = new Date(workoutDate);
+
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+}
+
+function getDaysSinceWorkout(workout: Workout) {
+  const workoutDate = getWorkoutDate(workout);
+
+  if (!workoutDate) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.floor((Date.now() - workoutDate.getTime()) / millisecondsPerDay)
+  );
+}
+
+function getFatigueMultiplier(daysSinceWorkout: number) {
+  if (daysSinceWorkout <= 0) {
+    return 1;
+  }
+
+  if (daysSinceWorkout === 1) {
+    return 0.75;
+  }
+
+  if (daysSinceWorkout === 2) {
+    return 0.5;
+  }
+
+  if (daysSinceWorkout === 3) {
+    return 0.25;
+  }
+
+  return 0;
+}
+
 export function getExerciseRecommendation(
   exerciseEntry: ExerciseEntry
 ): ExerciseRecommendation {
@@ -133,36 +180,41 @@ export function getSmartCoachInsight(
 ): SmartCoachInsight {
   const recentWorkouts = workouts.slice(0, 5);
   const recentExercises = recentWorkouts.flatMap((workout) => workout.exercises);
-  const recentSetEntries = recentExercises.flatMap(getExerciseSetEntries);
   const activeGoal = goals.find((goal) => goal.status === "Active") ?? goals[0];
   const currentProgram = programs[0];
-  const hardSets = recentSetEntries.filter((setEntry) => Number(setEntry.rir) <= 1).length;
-  const highSorenessExercises = recentExercises.filter(
-    (exerciseEntry) => Number(exerciseEntry.soreness) >= 3
-  ).length;
   const lowPumpExercises = recentExercises.filter(
     (exerciseEntry) => Number(exerciseEntry.pump) <= 1
   ).length;
-  const tiredWorkouts = recentWorkouts.filter((workout) =>
-    ["Tired", "Weak"].includes(workout.feeling)
-  ).length;
 
-  const lastWorkoutDate = recentWorkouts[0]?.date
-    ? new Date(recentWorkouts[0].date)
-    : null;
+  let hardSetFatigue = 0;
+  let sorenessFatigue = 0;
+  let tiredWorkoutFatigue = 0;
+
+  recentWorkouts.forEach((workout) => {
+    const fatigueMultiplier = getFatigueMultiplier(getDaysSinceWorkout(workout));
+    const workoutExercises = workout.exercises;
+    const hardSets = workoutExercises
+      .flatMap(getExerciseSetEntries)
+      .filter((setEntry) => Number(setEntry.rir) <= 1).length;
+    const soreExercises = workoutExercises.filter(
+      (exerciseEntry) => Number(exerciseEntry.soreness) >= 3
+    ).length;
+    const feltTired = ["Tired", "Weak"].includes(workout.feeling);
+
+    hardSetFatigue += hardSets * fatigueMultiplier;
+    sorenessFatigue += soreExercises * fatigueMultiplier;
+    tiredWorkoutFatigue += feltTired ? fatigueMultiplier : 0;
+  });
+
   const daysSinceLastWorkout =
-    lastWorkoutDate && !Number.isNaN(lastWorkoutDate.getTime())
-      ? Math.floor(
-          (Date.now() - lastWorkoutDate.getTime()) / (1000 * 60 * 60 * 24)
-        )
-      : 0;
+    recentWorkouts.length > 0 ? getDaysSinceWorkout(recentWorkouts[0]) : 0;
 
   let recoveryScore = 88;
-  recoveryScore -= hardSets * 4;
-  recoveryScore -= highSorenessExercises * 10;
-  recoveryScore -= tiredWorkouts * 12;
+  recoveryScore -= hardSetFatigue * 4;
+  recoveryScore -= sorenessFatigue * 10;
+  recoveryScore -= tiredWorkoutFatigue * 12;
   recoveryScore += Math.min(daysSinceLastWorkout * 12, 36);
-  recoveryScore = Math.max(20, Math.min(98, recoveryScore));
+  recoveryScore = Math.round(Math.max(20, Math.min(98, recoveryScore)));
 
   const recoveryLabel =
     recoveryScore >= 80
@@ -176,9 +228,11 @@ export function getSmartCoachInsight(
   const nextMove =
     recentWorkouts.length === 0
       ? "Log your first workout so Smart Coach can start reading your training patterns."
+      : daysSinceLastWorkout >= 4
+        ? "You have had several days away from logged training. Ease back in, but your recovery should be much better."
       : recoveryScore < 55
         ? "Keep today's session lighter: reduce load slightly or remove 1 set from hard movements."
-        : hardSets >= 4
+        : hardSetFatigue >= 4
           ? "Repeat your last hard lifts before adding weight. You were close to failure often."
           : lowPumpExercises >= 3
             ? "Add 1 set to a low-pump muscle group or slow the tempo on isolation work."
