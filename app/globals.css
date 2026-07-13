@@ -47,6 +47,13 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+@media (min-width: 1024px) {
+  main {
+    margin-left: 18rem;
+    width: calc(100% - 18rem);
+  }
+}
+
 * {
   transition:
     background-color 180ms ease,
@@ -169,14 +176,23 @@ summary:hover {
   color: var(--accent-hover);
 }
 
-header {
+.app-mobile-header,
+.app-sidebar {
   border-bottom-color: var(--accent-border) !important;
   backdrop-filter: blur(18px);
   box-shadow: 0 16px 44px color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.22));
 }
 
-header img,
-header svg {
+.app-sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface-strong)),
+    var(--surface-strong) !important;
+}
+
+.app-mobile-header img,
+.app-mobile-header svg,
+.app-sidebar img,
+.app-sidebar svg {
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 35%, transparent));
 }
 
@@ -232,7 +248,8 @@ main > section > div[class*="rounded-lg"]:first-child > * {
     linear-gradient(135deg, #f8fafc 0%, #eef2f7 52%, #e2e8f0 100%);
 }
 
-:root[data-theme="light"] header {
+:root[data-theme="light"] .app-mobile-header,
+:root[data-theme="light"] .app-sidebar {
   background: rgba(255, 255, 255, 0.96) !important;
   color: var(--foreground) !important;
   box-shadow: 0 14px 36px color-mix(in srgb, var(--accent) 12%, rgba(15, 23, 42, 0.08));

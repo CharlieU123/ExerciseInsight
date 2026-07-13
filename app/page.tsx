@@ -43,6 +43,24 @@ function getGoalProgress(goal?: FitnessGoal) {
   return Math.min(Math.round((current / target) * 100), 100);
 }
 
+function RecoveryRing({ score }: { score: number }) {
+  return (
+    <div
+      className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full shadow-[0_0_38px_rgba(34,211,238,0.22)]"
+      style={{
+        background: `conic-gradient(var(--accent-hover) ${score * 3.6}deg, rgba(30, 41, 59, 0.9) 0deg)`,
+      }}
+    >
+      <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-gray-950 text-center">
+        <span className="text-4xl font-bold text-cyan-300">{score}</span>
+        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Recovery
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [goals, setGoals] = useState<FitnessGoal[]>([]);
@@ -121,25 +139,35 @@ export default function HomePage() {
     workouts.length === 0 && goals.length === 0 && programs.length === 0;
 
   return (
-    <main className="min-h-screen p-4 sm:p-6">
-      <section className="mx-auto max-w-6xl">
-        <div className="mb-8 rounded-lg border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-8">
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-400">
-            Home
-          </p>
-          <h1 className="mb-3 max-w-3xl text-3xl font-bold sm:text-5xl">
-            {profile.name
-              ? "Welcome back, " + profile.name
-              : "ExerciseInsight training dashboard"}
-          </h1>
-          <p className="max-w-2xl text-gray-300">
-            See your weekly training, active goals, current program, and recent
-            workout feedback in one place.
-          </p>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+    <main className="min-h-screen p-4 sm:p-6 lg:p-10">
+      <section className="mx-auto max-w-4xl">
+        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-gray-400">Good training starts here,</p>
+            <h1 className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">
+              {profile.name ? profile.name : "ExerciseInsight"}
+            </h1>
+          </div>
+          <div className="hidden h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 to-violet-500 text-base font-bold text-gray-950 shadow-lg shadow-cyan-950/30 sm:flex">
+            {profile.name ? profile.name.slice(0, 2).toUpperCase() : "EI"}
+          </div>
+        </div>
+
+        <div className="mb-8 rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-8">
+          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                Dashboard
+              </p>
+              <h2 className="max-w-3xl text-2xl font-bold sm:text-3xl">
+                Train smarter with your current program, recovery, and recent feedback.
+              </h2>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Link
               href="/add-workout"
-              className="rounded-md bg-blue-600 px-4 py-3 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
+              className="rounded-2xl bg-blue-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
             >
               Add Workout
             </Link>
@@ -150,20 +178,20 @@ export default function HomePage() {
                     ? `/add-workout?programId=${currentProgram.id}&dayId=${currentProgramFirstDay.id}`
                     : `/add-workout?programId=${currentProgram.id}`
                 }
-                className="rounded-md bg-green-600 px-4 py-3 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
+                className="rounded-2xl bg-green-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
               >
                 Start Current Program
               </Link>
             )}
             <Link
               href="/progress"
-              className="rounded-md bg-white/10 px-4 py-3 text-center font-semibold text-gray-100 hover:bg-white/15"
+              className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
             >
               View Progress
             </Link>
             <Link
               href="/programs"
-              className="rounded-md bg-white/10 px-4 py-3 text-center font-semibold text-gray-100 hover:bg-white/15"
+              className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
             >
               Manage Program
             </Link>
@@ -213,62 +241,59 @@ export default function HomePage() {
             title="Smart Coach"
             description="Rule-based coaching from your recent training data."
           >
-            <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-              <div className="rounded-lg border border-gray-800 bg-gray-950 p-5">
-                <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="grid gap-4">
+              <div className="rounded-3xl border border-gray-800 bg-gray-950 p-5 sm:p-7">
+                <div className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm text-gray-400">Recovery Score</p>
-                    <h2 className="mt-1 text-5xl font-bold">
-                      {smartCoachInsight.recoveryScore}
-                      <span className="text-lg text-gray-400">/100</span>
-                    </h2>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                      Smart Coach
+                    </p>
+                    <h2 className="mt-4 text-3xl font-bold">Recovery Status</h2>
+                    <p className="mt-2 text-gray-400">
+                      {smartCoachInsight.recoveryLabel} · {smartCoachInsight.nextMove}
+                    </p>
                   </div>
-                  <span className="rounded-full bg-blue-950/40 px-3 py-1 text-xs font-semibold text-blue-300">
-                    {smartCoachInsight.confidence} confidence
-                  </span>
+                  <RecoveryRing score={smartCoachInsight.recoveryScore} />
                 </div>
-                <div className="h-3 rounded-full bg-gray-900">
-                  <div
-                    className="h-3 rounded-full bg-blue-600"
-                    style={{ width: smartCoachInsight.recoveryScore + "%" }}
-                  />
+                <div className="grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-3">
+                  <div>
+                    <p className="text-sm text-gray-500">Confidence</p>
+                    <p className="mt-1 text-xl font-bold">{smartCoachInsight.confidence}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Recommendation</p>
+                    <p className="mt-1 text-xl font-bold">{deloadRecommendation.action}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Last Exercise</p>
+                    <p className="mt-1 text-xl font-bold">
+                      {lastExercise ? lastExercise.exercise : "None yet"}
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-4 text-xl font-semibold">
-                  {smartCoachInsight.recoveryLabel}
-                </p>
-                <p className="mt-2 text-sm text-gray-300">
-                  {deloadRecommendation.detail}
-                </p>
-              </div>
-
-              <div className="grid gap-4">
-                <div className="rounded-lg border border-gray-800 bg-gray-950 p-5">
-                  <p className="text-sm text-gray-400">Next Recommendation</p>
-                  <h2 className="mt-1 text-2xl font-bold">
-                    {deloadRecommendation.action}
-                  </h2>
-                  <p className="mt-2 text-sm text-gray-300">
-                    {smartCoachInsight.nextMove}
+                <div className="mt-5 rounded-2xl bg-white/5 p-4">
+                  <p className="text-sm text-gray-300">
+                    {deloadRecommendation.detail}
                   </p>
                 </div>
+              </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
-                    <p className="text-sm text-gray-400">Training Focus</p>
-                    <p className="mt-2 text-sm text-gray-300">
-                      {smartCoachInsight.trainingFocus}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
-                    <p className="text-sm text-gray-400">Program Guidance</p>
-                    <p className="mt-2 text-sm text-gray-300">
-                      {smartCoachInsight.programNote}
-                    </p>
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
+                  <p className="text-sm text-gray-400">Training Focus</p>
+                  <p className="mt-2 text-sm text-gray-300">
+                    {smartCoachInsight.trainingFocus}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
+                  <p className="text-sm text-gray-400">Program Guidance</p>
+                  <p className="mt-2 text-sm text-gray-300">
+                    {smartCoachInsight.programNote}
+                  </p>
                 </div>
               </div>
 
-              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4 lg:col-span-2">
+              <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
                 <p className="text-sm text-gray-400">Last Exercise Snapshot</p>
                 <p className="mt-1 text-xl font-bold">
                   {lastExercise ? lastExercise.exercise : "None yet"}
