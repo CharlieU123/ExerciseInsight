@@ -47,6 +47,12 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+@media (max-width: 1023px) {
+  main {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 @media (min-width: 1024px) {
   main {
     margin-left: 18rem;
@@ -177,13 +183,15 @@ summary:hover {
 }
 
 .app-mobile-header,
-.app-sidebar {
+.app-sidebar,
+.app-bottom-tabs {
   border-bottom-color: var(--accent-border) !important;
   backdrop-filter: blur(18px);
   box-shadow: 0 16px 44px color-mix(in srgb, var(--accent) 12%, rgba(0, 0, 0, 0.22));
 }
 
-.app-sidebar {
+.app-sidebar,
+.app-bottom-tabs {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, var(--surface)), var(--surface-strong)),
     var(--surface-strong) !important;
@@ -192,7 +200,9 @@ summary:hover {
 .app-mobile-header img,
 .app-mobile-header svg,
 .app-sidebar img,
-.app-sidebar svg {
+.app-sidebar svg,
+.app-bottom-tabs img,
+.app-bottom-tabs svg {
   filter: drop-shadow(0 0 12px color-mix(in srgb, var(--accent) 35%, transparent));
 }
 
@@ -249,7 +259,8 @@ main > section > div[class*="rounded-lg"]:first-child > * {
 }
 
 :root[data-theme="light"] .app-mobile-header,
-:root[data-theme="light"] .app-sidebar {
+:root[data-theme="light"] .app-sidebar,
+:root[data-theme="light"] .app-bottom-tabs {
   background: rgba(255, 255, 255, 0.96) !important;
   color: var(--foreground) !important;
   box-shadow: 0 14px 36px color-mix(in srgb, var(--accent) 12%, rgba(15, 23, 42, 0.08));

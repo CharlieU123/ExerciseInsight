@@ -3,7 +3,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
 
 const links = [
   { href: "/", label: "Home", icon: "H" },
@@ -15,7 +14,6 @@ const links = [
 
 export function NavBar() {
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <>
@@ -82,8 +80,7 @@ export function NavBar() {
       </aside>
 
       <header className="app-mobile-header sticky top-0 z-20 border-b border-white/10 bg-gray-950/85 text-white backdrop-blur lg:hidden">
-        <nav className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
-        <div className="flex items-center justify-between gap-3">
+        <nav className="mx-auto flex max-w-6xl px-4 py-3 sm:px-6">
           <Link href="/" className="flex min-w-0 items-center gap-3">
             <Image
               src="/exerciseinsight-mark.svg"
@@ -102,25 +99,11 @@ export function NavBar() {
               </span>
             </span>
           </Link>
+        </nav>
+      </header>
 
-          <button
-            type="button"
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15 md:hidden"
-            aria-expanded={menuOpen}
-            aria-controls="mobile-navigation"
-          >
-            {menuOpen ? "Close" : "Menu"}
-          </button>
-        </div>
-
-        <div
-          id="mobile-navigation"
-          className={
-            (menuOpen ? "grid" : "hidden") +
-            " grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center"
-          }
-        >
+      <nav className="app-bottom-tabs fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-gray-950/90 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_-18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl lg:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {links.map((link) => {
             const isActive = pathname === link.href;
 
@@ -128,20 +111,19 @@ export function NavBar() {
               <Link
                 key={link.href}
                 href={link.href}
-                onClick={() => setMenuOpen(false)}
                 className={
                   isActive
-                    ? "rounded-md bg-blue-600 px-3 py-2 text-center text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition"
-                    : "rounded-md bg-white/5 px-3 py-2 text-center text-sm font-semibold text-gray-300 transition hover:bg-white/10 hover:text-white"
+                    ? "flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl bg-cyan-400/10 px-2 py-2 text-center text-xs font-semibold text-cyan-300 shadow-[0_0_22px_rgba(34,211,238,0.12)]"
+                    : "flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-center text-xs font-semibold text-gray-500 hover:bg-white/5 hover:text-gray-200"
                 }
               >
-                {link.label}
+                <span className="text-base leading-none">{link.icon}</span>
+                <span className="leading-none">{link.label}</span>
               </Link>
             );
           })}
         </div>
-        </nav>
-      </header>
+      </nav>
     </>
   );
 }
