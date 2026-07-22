@@ -60,7 +60,6 @@ type MonthlyRecap = {
   workouts: number;
   exercises: number;
   sets: number;
-  volume: number;
   uniqueExercises: number;
   topExercise: string;
   bestEstimatedOneRepMax: number;
@@ -241,22 +240,9 @@ function getWorkoutTime(workout: Workout) {
   return new Date(workout.dateISO || workout.date).getTime();
 }
 
-function calculateExerciseVolume(exerciseEntry: ExerciseEntry) {
-  return getExerciseSetEntries(exerciseEntry).reduce((total, setEntry) => {
-    const weight = Number(setEntry.weight);
-    const reps = Number(setEntry.reps);
-
-    if (Number.isNaN(weight) || Number.isNaN(reps)) {
-      return total;
-    }
-
-    return total + weight * reps;
-  }, 0);
-}
-
-function calculateWorkoutVolume(workout: Workout) {
+function calculateWorkoutSetVolume(workout: Workout) {
   return workout.exercises.reduce(
-    (total, exerciseEntry) => total + calculateExerciseVolume(exerciseEntry),
+    (total, exerciseEntry) => total + getExerciseSetCount(exerciseEntry),
     0
   );
 }
@@ -309,10 +295,6 @@ function calculateMonthlyRecap(workouts: Workout[]): MonthlyRecap {
         ),
       0
     ),
-    volume: monthWorkouts.reduce(
-      (total, workout) => total + calculateWorkoutVolume(workout),
-      0
-    ),
     uniqueExercises: exerciseCounts.size,
     topExercise,
     bestEstimatedOneRepMax,
@@ -341,7 +323,7 @@ function calculateVolumeForWeek(workouts: Workout[], offset: number) {
       const workoutTime = getWorkoutTime(workout);
       return workoutTime >= start.getTime() && workoutTime < end.getTime();
     })
-    .reduce((total, workout) => total + calculateWorkoutVolume(workout), 0);
+    .reduce((total, workout) => total + calculateWorkoutSetVolume(workout), 0);
 }
 
 function calculateCurrentStreak(workouts: Workout[]) {
@@ -577,7 +559,7 @@ export default function ProgressPage() {
           </p>
           <h1 className="mb-3 text-3xl font-bold sm:text-4xl">Weekly Progress</h1>
           <p className="text-gray-300">
-            Track consistency, workout volume, and recent training activity.
+            Track consistency, set volume, and recent training activity.
           </p>
         </div>
 
@@ -626,9 +608,9 @@ export default function ProgressPage() {
                     <p className="text-3xl font-bold">{monthlyRecap.sets}</p>
                   </div>
                   <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
-                    <p className="text-sm text-gray-400">Volume</p>
+                    <p className="text-sm text-gray-400">Set Volume</p>
                     <p className="text-3xl font-bold">
-                      {Math.round(monthlyRecap.volume).toLocaleString()}
+                      {monthlyRecap.sets.toLocaleString()}
                     </p>
                   </div>
                   <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
@@ -661,12 +643,12 @@ export default function ProgressPage() {
         <div className="mb-8">
           <CollapsibleSection
             title="Advanced Progress Tools"
-            description="Compare weekly volume, effort, streaks, and muscle balance."
+            description="Compare weekly set volume, effort, streaks, and muscle balance."
           >
             <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
               <div className="space-y-3">
                 <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
-                  <p className="text-sm text-gray-400">Weekly Volume Change</p>
+                  <p className="text-sm text-gray-400">Weekly Set Volume Change</p>
                   <p
                     className={
                       "text-3xl font-bold " +
@@ -681,13 +663,11 @@ export default function ProgressPage() {
                   <div className="mt-2 grid gap-2 text-sm text-gray-500 sm:grid-cols-2">
                     <p>
                       <span className="font-semibold text-gray-300">This week:</span>{" "}
-                      {Math.round(advancedProgress.currentWeekVolume).toLocaleString()}{" "}
-                      lbs
+                      {advancedProgress.currentWeekVolume.toLocaleString()} sets
                     </p>
                     <p>
                       <span className="font-semibold text-gray-300">Last week:</span>{" "}
-                      {Math.round(advancedProgress.previousWeekVolume).toLocaleString()}{" "}
-                      lbs
+                      {advancedProgress.previousWeekVolume.toLocaleString()} sets
                     </p>
                   </div>
                 </div>
