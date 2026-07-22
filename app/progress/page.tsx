@@ -55,6 +55,31 @@ type ExerciseTrendPoint = {
   estimatedOneRepMax: number;
 };
 
+type MonthlyRecap = {
+  monthName: string;
+  workouts: number;
+  exercises: number;
+  sets: number;
+  volume: number;
+  uniqueExercises: number;
+  topExercise: string;
+  bestEstimatedOneRepMax: number;
+};
+
+type AdvancedProgress = {
+  currentWeekVolume: number;
+  previousWeekVolume: number;
+  volumeChangePercent: number;
+  currentStreak: number;
+  averageRir: number;
+  mostTrainedMuscle: string;
+  muscleBalance: {
+    muscleGroup: string;
+    sets: number;
+    percent: number;
+  }[];
+};
+
 function calculateEstimatedOneRepMax(weight: number, reps: number) {
   if (!weight || !reps) {
     return 0;
@@ -212,6 +237,194 @@ function calculateWeeklyMuscleVolume(workouts: Workout[]) {
     .sort((firstVolume, secondVolume) => secondVolume.sets - firstVolume.sets);
 }
 
+function getWorkoutTime(workout: Workout) {
+  return new Date(workout.dateISO || workout.date).getTime();
+}
+
+function calculateExerciseVolume(exerciseEntry: ExerciseEntry) {
+  return getExerciseSetEntries(exerciseEntry).reduce((total, setEntry) => {
+    const weight = Number(setEntry.weight);
+    const reps = Number(setEntry.reps);
+
+    if (Number.isNaN(weight) || Number.isNaN(reps)) {
+      return total;
+    }
+
+    return total + weight * reps;
+  }, 0);
+}
+
+function calculateWorkoutVolume(workout: Workout) {
+  return workout.exercises.reduce(
+    (total, exerciseEntry) => total + calculateExerciseVolume(exerciseEntry),
+    0
+  );
+}
+
+function calculateMonthlyRecap(workouts: Workout[]): MonthlyRecap {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthWorkouts = workouts.filter((workout) => {
+    const workoutTime = getWorkoutTime(workout);
+    return workoutTime >= monthStart.getTime() && workoutTime < nextMonth.getTime();
+  });
+  const exerciseCounts = new Map<string, number>();
+  let bestEstimatedOneRepMax = 0;
+
+  monthWorkouts.forEach((workout) => {
+    workout.exercises.forEach((exerciseEntry) => {
+      const exerciseName = exerciseEntry.exercise.trim();
+      exerciseCounts.set(exerciseName, (exerciseCounts.get(exerciseName) ?? 0) + 1);
+
+      getExerciseSetEntries(exerciseEntry).forEach((setEntry) => {
+        const estimatedOneRepMax = calculateEstimatedOneRepMax(
+          Number(setEntry.weight),
+          Number(setEntry.reps)
+        );
+        bestEstimatedOneRepMax = Math.max(bestEstimatedOneRepMax, estimatedOneRepMax);
+      });
+    });
+  });
+
+  const topExercise =
+    Array.from(exerciseCounts.entries()).sort(
+      (firstExercise, secondExercise) => secondExercise[1] - firstExercise[1]
+    )[0]?.[0] ?? "None yet";
+
+  return {
+    monthName: now.toLocaleDateString(undefined, { month: "long" }),
+    workouts: monthWorkouts.length,
+    exercises: monthWorkouts.reduce(
+      (total, workout) => total + workout.exercises.length,
+      0
+    ),
+    sets: monthWorkouts.reduce(
+      (total, workout) =>
+        total +
+        workout.exercises.reduce(
+          (exerciseTotal, exerciseEntry) =>
+            exerciseTotal + getExerciseSetCount(exerciseEntry),
+          0
+        ),
+      0
+    ),
+    volume: monthWorkouts.reduce(
+      (total, workout) => total + calculateWorkoutVolume(workout),
+      0
+    ),
+    uniqueExercises: exerciseCounts.size,
+    topExercise,
+    bestEstimatedOneRepMax,
+  };
+}
+
+function calculateWeekRange(offset: number) {
+  const now = new Date();
+  const start = new Date(now);
+  const day = start.getDay();
+  const distanceFromMonday = day === 0 ? 6 : day - 1;
+  start.setDate(now.getDate() - distanceFromMonday + offset * 7);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 7);
+
+  return { start, end };
+}
+
+function calculateVolumeForWeek(workouts: Workout[], offset: number) {
+  const { start, end } = calculateWeekRange(offset);
+
+  return workouts
+    .filter((workout) => {
+      const workoutTime = getWorkoutTime(workout);
+      return workoutTime >= start.getTime() && workoutTime < end.getTime();
+    })
+    .reduce((total, workout) => total + calculateWorkoutVolume(workout), 0);
+}
+
+function calculateCurrentStreak(workouts: Workout[]) {
+  const workoutDays = new Set(
+    workouts.map((workout) => new Date(getWorkoutTime(workout)).toDateString())
+  );
+  let streak = 0;
+  const cursor = new Date();
+
+  for (let index = 0; index < 30; index += 1) {
+    if (workoutDays.has(cursor.toDateString())) {
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+      continue;
+    }
+
+    if (index === 0) {
+      cursor.setDate(cursor.getDate() - 1);
+      continue;
+    }
+
+    break;
+  }
+
+  return streak;
+}
+
+function calculateAdvancedProgress(workouts: Workout[]): AdvancedProgress {
+  const currentWeekVolume = calculateVolumeForWeek(workouts, 0);
+  const previousWeekVolume = calculateVolumeForWeek(workouts, -1);
+  const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const muscleSets = new Map<string, number>();
+  const recentRirs: number[] = [];
+
+  workouts
+    .filter((workout) => getWorkoutTime(workout) >= recentCutoff)
+    .forEach((workout) => {
+      workout.exercises.forEach((exerciseEntry) => {
+        const group = exerciseEntry.muscleGroup || "Other";
+        muscleSets.set(group, (muscleSets.get(group) ?? 0) + getExerciseSetCount(exerciseEntry));
+        getExerciseSetEntries(exerciseEntry).forEach((setEntry) => {
+          const rir = Number(setEntry.rir);
+          if (!Number.isNaN(rir)) {
+            recentRirs.push(rir);
+          }
+        });
+      });
+    });
+
+  const totalSets = Array.from(muscleSets.values()).reduce(
+    (total, sets) => total + sets,
+    0
+  );
+  const muscleBalance = Array.from(muscleSets.entries())
+    .map(([muscleGroup, sets]) => ({
+      muscleGroup,
+      sets,
+      percent: totalSets ? Math.round((sets / totalSets) * 100) : 0,
+    }))
+    .sort((firstGroup, secondGroup) => secondGroup.sets - firstGroup.sets);
+  const mostTrainedMuscle = muscleBalance[0]?.muscleGroup ?? "None yet";
+  const volumeChangePercent = previousWeekVolume
+    ? Math.round(((currentWeekVolume - previousWeekVolume) / previousWeekVolume) * 100)
+    : currentWeekVolume > 0
+      ? 100
+      : 0;
+
+  return {
+    currentWeekVolume,
+    previousWeekVolume,
+    volumeChangePercent,
+    currentStreak: calculateCurrentStreak(workouts),
+    averageRir: recentRirs.length
+      ? Math.round(
+          (recentRirs.reduce((total, rir) => total + rir, 0) / recentRirs.length) *
+            10
+        ) / 10
+      : 0,
+    mostTrainedMuscle,
+    muscleBalance,
+  };
+}
+
 function calculateRecentPrs(workouts: Workout[]) {
   const bestByExercise = new Map<string, number>();
   const prs: RecentPr[] = [];
@@ -348,6 +561,8 @@ export default function ProgressPage() {
   const exerciseNames = getUniqueExerciseNames(workouts);
   const activeTrendExercise = selectedTrendExercise || exerciseNames[0] || "";
   const exerciseTrend = buildExerciseTrend(workouts, activeTrendExercise);
+  const monthlyRecap = calculateMonthlyRecap(workouts);
+  const advancedProgress = calculateAdvancedProgress(workouts);
   const highestTrendEstimate = Math.max(
     ...exerciseTrend.map((trendPoint) => trendPoint.estimatedOneRepMax),
     1
@@ -388,6 +603,145 @@ export default function ProgressPage() {
               {topMuscleGroup ? topMuscleGroup.muscleGroup : "None"}
             </p>
           </div>
+        </div>
+
+        <div className="mb-8">
+          <CollapsibleSection
+            title="Monthly Recap"
+            description={`A quick summary of your ${monthlyRecap.monthName} training.`}
+          >
+            {monthlyRecap.workouts === 0 ? (
+              <p className="text-gray-400">
+                Log a workout this month to generate your monthly recap.
+              </p>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                    <p className="text-sm text-gray-400">Workouts</p>
+                    <p className="text-3xl font-bold">{monthlyRecap.workouts}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                    <p className="text-sm text-gray-400">Working Sets</p>
+                    <p className="text-3xl font-bold">{monthlyRecap.sets}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                    <p className="text-sm text-gray-400">Volume</p>
+                    <p className="text-3xl font-bold">
+                      {Math.round(monthlyRecap.volume).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                    <p className="text-sm text-gray-400">Exercises</p>
+                    <p className="text-3xl font-bold">
+                      {monthlyRecap.uniqueExercises}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4">
+                    <p className="text-sm text-cyan-200">Most Logged Exercise</p>
+                    <p className="mt-1 text-2xl font-bold">
+                      {monthlyRecap.topExercise}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-green-500/20 bg-green-950/20 p-4">
+                    <p className="text-sm text-green-200">Best Estimated 1RM</p>
+                    <p className="mt-1 text-2xl font-bold">
+                      {monthlyRecap.bestEstimatedOneRepMax} lbs
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CollapsibleSection>
+        </div>
+
+        <div className="mb-8">
+          <CollapsibleSection
+            title="Advanced Progress Tools"
+            description="Compare weekly volume, effort, streaks, and muscle balance."
+          >
+            <div className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+              <div className="space-y-3">
+                <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                  <p className="text-sm text-gray-400">Weekly Volume Change</p>
+                  <p
+                    className={
+                      "text-3xl font-bold " +
+                      (advancedProgress.volumeChangePercent >= 0
+                        ? "text-green-300"
+                        : "text-yellow-300")
+                    }
+                  >
+                    {advancedProgress.volumeChangePercent > 0 ? "+" : ""}
+                    {advancedProgress.volumeChangePercent}%
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {Math.round(advancedProgress.currentWeekVolume).toLocaleString()}{" "}
+                    lbs this week vs{" "}
+                    {Math.round(advancedProgress.previousWeekVolume).toLocaleString()}{" "}
+                    last week
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                    <p className="text-sm text-gray-400">Current Streak</p>
+                    <p className="text-2xl font-bold">
+                      {advancedProgress.currentStreak}{" "}
+                      {advancedProgress.currentStreak === 1 ? "day" : "days"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                    <p className="text-sm text-gray-400">Avg RIR, 30 Days</p>
+                    <p className="text-2xl font-bold">
+                      {advancedProgress.averageRir || "No data"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400">Muscle Balance, 30 Days</p>
+                    <h3 className="text-xl font-semibold">
+                      Most trained: {advancedProgress.mostTrainedMuscle}
+                    </h3>
+                  </div>
+                </div>
+
+                {advancedProgress.muscleBalance.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    Log workouts with muscle groups to see muscle balance.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {advancedProgress.muscleBalance.slice(0, 6).map((volume) => (
+                      <div key={volume.muscleGroup}>
+                        <div className="mb-1 flex items-center justify-between text-sm">
+                          <span className="font-semibold text-gray-300">
+                            {volume.muscleGroup}
+                          </span>
+                          <span className="text-gray-400">
+                            {volume.sets} sets · {volume.percent}%
+                          </span>
+                        </div>
+                        <div className="h-3 rounded-full bg-gray-900">
+                          <div
+                            className="h-3 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500"
+                            style={{ width: Math.max(volume.percent, 5) + "%" }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CollapsibleSection>
         </div>
 
         <div className="mb-8">

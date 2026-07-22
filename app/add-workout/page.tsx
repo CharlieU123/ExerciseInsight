@@ -3,11 +3,15 @@
 import { useEffect, useState } from "react";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { EmptyState } from "../components/EmptyState";
+import { ExerciseDemo } from "../components/ExerciseDemo";
 import { RestTimer } from "../components/RestTimer";
 import { SpeechToTextButton } from "../components/SpeechToTextButton";
 import {
   exerciseLibrary,
   buildSetEntries,
+  getExerciseAverageRir,
+  getExerciseSetEntries,
+  getExerciseTopWeight,
   getProgramDays,
   loadWorkouts,
   loadTrainingPrograms,
@@ -143,6 +147,49 @@ function getPreviousExercisePerformance(
   }
 
   return null;
+}
+
+function getExerciseHistory(workouts: Workout[], exerciseName: string) {
+  const normalizedExerciseName = exerciseName.trim().toLowerCase();
+
+  if (!normalizedExerciseName) {
+    return [];
+  }
+
+  return workouts
+    .flatMap((workout) =>
+      workout.exercises
+        .filter(
+          (exerciseEntry) =>
+            exerciseEntry.exercise.trim().toLowerCase() === normalizedExerciseName
+        )
+        .map((exerciseEntry) => ({
+          date: workout.date,
+          exercise: exerciseEntry,
+          topWeight: getExerciseTopWeight(exerciseEntry),
+          averageRir: getExerciseAverageRir(exerciseEntry),
+          setCount: getExerciseSetEntries(exerciseEntry).length,
+        }))
+    )
+    .slice(0, 4);
+}
+
+function getExerciseHistorySuggestion(history: ReturnType<typeof getExerciseHistory>) {
+  const lastSession = history[0];
+
+  if (!lastSession) {
+    return "Log this exercise a few times and ExerciseInsight will compare your recent sessions.";
+  }
+
+  if (lastSession.averageRir >= 3) {
+    return "Last time looked comfortable. Consider adding a little weight or one extra rep if warmups feel strong.";
+  }
+
+  if (lastSession.averageRir <= 1) {
+    return "Last time was close to failure. Repeat the same load or keep a rep in reserve today.";
+  }
+
+  return "Last session was in a productive range. Try to match it first, then progress if the sets move well.";
 }
 
 export default function AddWorkoutPage() {
@@ -691,6 +738,7 @@ export default function AddWorkoutPage() {
     workouts,
     exercise
   );
+  const exerciseHistory = getExerciseHistory(workouts, exercise);
 
   return (
     <main className="min-h-screen p-4 sm:p-6">
@@ -814,6 +862,59 @@ export default function AddWorkoutPage() {
                     Last time on {previousExercisePerformance.date}:{" "}
                     {summarizeExerciseSets(previousExercisePerformance.exercise)}
                   </p>
+                )}
+              </div>
+
+              <ExerciseDemo exercise={selectedLibraryItem} />
+
+              <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
+                      Exercise History
+                    </p>
+                    <h3 className="mt-1 font-semibold">
+                      {exercise.trim() || "Select an exercise"}
+                    </h3>
+                  </div>
+                  {exerciseHistory.length > 0 && (
+                    <span className="w-fit rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">
+                      Last {exerciseHistory.length}
+                    </span>
+                  )}
+                </div>
+
+                {exerciseHistory.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    Previous sessions for this exercise will show here while logging.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="rounded-md border border-cyan-500/20 bg-cyan-950/20 p-3 text-sm text-cyan-100">
+                      {getExerciseHistorySuggestion(exerciseHistory)}
+                    </p>
+                    {exerciseHistory.map((historyEntry) => (
+                      <div
+                        key={historyEntry.date + historyEntry.exercise.id}
+                        className="rounded-md border border-gray-800 bg-gray-900 p-3"
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <p className="font-semibold">{historyEntry.date}</p>
+                          <p className="text-sm text-gray-400">
+                            {historyEntry.setCount}{" "}
+                            {historyEntry.setCount === 1 ? "set" : "sets"}
+                          </p>
+                        </div>
+                        <p className="text-sm text-gray-300">
+                          {summarizeExerciseSets(historyEntry.exercise)}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Top weight: {historyEntry.topWeight || 0} lbs · Avg RIR:{" "}
+                          {Math.round(historyEntry.averageRir * 10) / 10}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
