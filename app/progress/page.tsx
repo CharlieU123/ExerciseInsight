@@ -678,12 +678,18 @@ export default function ProgressPage() {
                     {advancedProgress.volumeChangePercent > 0 ? "+" : ""}
                     {advancedProgress.volumeChangePercent}%
                   </p>
-                  <p className="text-sm text-gray-500">
-                    {Math.round(advancedProgress.currentWeekVolume).toLocaleString()}{" "}
-                    lbs this week vs{" "}
-                    {Math.round(advancedProgress.previousWeekVolume).toLocaleString()}{" "}
-                    last week
-                  </p>
+                  <div className="mt-2 grid gap-2 text-sm text-gray-500 sm:grid-cols-2">
+                    <p>
+                      <span className="font-semibold text-gray-300">This week:</span>{" "}
+                      {Math.round(advancedProgress.currentWeekVolume).toLocaleString()}{" "}
+                      lbs
+                    </p>
+                    <p>
+                      <span className="font-semibold text-gray-300">Last week:</span>{" "}
+                      {Math.round(advancedProgress.previousWeekVolume).toLocaleString()}{" "}
+                      lbs
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
