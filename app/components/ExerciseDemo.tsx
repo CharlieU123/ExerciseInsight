@@ -1,4 +1,3 @@
-import Image from "next/image";
 import type { ExerciseLibraryItem } from "../lib/fitnessData";
 
 type ExerciseDemoProps = {
@@ -44,7 +43,35 @@ function getMotionLabel(exercise: ExerciseLibraryItem) {
   return "Use a controlled range of motion and keep tension on the target.";
 }
 
+function getBenchPressSetupCue() {
+  return "Lie with your eyes under the bar, plant your feet, and pull your shoulder blades back and down into the bench.";
+}
+
+function getBenchPressExecutionCue() {
+  return "Lower the bar under control toward your mid-chest, keep your elbows slightly tucked, then press while keeping your upper back tight.";
+}
+
+function getBenchPressCommonMistakes() {
+  return [
+    "Bouncing the bar off your chest",
+    "Letting shoulders roll forward",
+    "Lifting your feet off the floor",
+  ];
+}
+
+function getPracticeTip(exercise: ExerciseLibraryItem) {
+  if (exercise.exercise.trim().toLowerCase() === "bench press") {
+    return "Use a lighter load until every rep touches the same spot and moves on the same path.";
+  }
+
+  return "Start lighter than you think you need and make every rep look the same before adding load.";
+}
+
 function getSetupCue(exercise: ExerciseLibraryItem) {
+  if (exercise.exercise.trim().toLowerCase() === "bench press") {
+    return getBenchPressSetupCue();
+  }
+
   const equipment = exercise.equipment.toLowerCase();
 
   if (equipment.includes("barbell")) {
@@ -71,6 +98,10 @@ function getSetupCue(exercise: ExerciseLibraryItem) {
 }
 
 function getCommonMistakes(exercise: ExerciseLibraryItem) {
+  if (exercise.exercise.trim().toLowerCase() === "bench press") {
+    return getBenchPressCommonMistakes();
+  }
+
   const group = exercise.muscleGroup.toLowerCase();
 
   if (group.includes("quad")) {
@@ -112,18 +143,6 @@ function getCommonMistakes(exercise: ExerciseLibraryItem) {
   ];
 }
 
-function getDemoMedia(exerciseName: string) {
-  if (exerciseName.trim().toLowerCase() === "bench press") {
-    return {
-      src: "/bench-press-demo.jpg",
-      alt: "Bench press demo showing a lifter pressing a barbell on a flat bench",
-      caption: "Bench Press demo: bar path, planted feet, and controlled press position.",
-    };
-  }
-
-  return null;
-}
-
 export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
   if (!exercise) {
     return (
@@ -133,8 +152,8 @@ export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
     );
   }
 
-  const demoMedia = getDemoMedia(exercise.exercise);
   const commonMistakes = getCommonMistakes(exercise);
+  const isBenchPress = exercise.exercise.trim().toLowerCase() === "bench press";
   const demoSteps = [
     {
       title: "Setup",
@@ -142,11 +161,11 @@ export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
     },
     {
       title: "Execution",
-      detail: getMotionLabel(exercise),
+      detail: isBenchPress ? getBenchPressExecutionCue() : getMotionLabel(exercise),
     },
     {
-      title: "Focus",
-      detail: exercise.cues[0] ?? "Keep each rep consistent and controlled.",
+      title: "Practice Tip",
+      detail: getPracticeTip(exercise),
     },
   ];
 
@@ -155,7 +174,7 @@ export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">
-            Exercise Demo
+            Form Cues
           </p>
           <h3 className="mt-1 font-semibold text-white">{exercise.exercise}</h3>
           <p className="text-sm text-gray-400">
@@ -165,27 +184,6 @@ export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
         <span className="w-fit rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200">
           {exercise.muscleGroup}
         </span>
-      </div>
-
-      <div className="mb-4 rounded-lg border border-gray-800 bg-gray-950 p-4">
-        {demoMedia ? (
-          <div>
-            <div className="overflow-hidden rounded-lg border border-cyan-500/20 bg-gray-900">
-              <Image
-                src={demoMedia.src}
-                alt={demoMedia.alt}
-                width={1536}
-                height={1024}
-                className="aspect-video w-full object-cover"
-              />
-            </div>
-            <p className="mt-3 text-sm text-gray-300">{demoMedia.caption}</p>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-gray-800 bg-gray-900 p-5 text-sm text-gray-400">
-            Demo image or video coming soon for this exercise.
-          </div>
-        )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
