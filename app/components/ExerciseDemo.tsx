@@ -1,78 +1,39 @@
+import Image from "next/image";
 import type { ExerciseLibraryItem } from "../lib/fitnessData";
 
 type ExerciseDemoProps = {
   exercise: ExerciseLibraryItem | undefined;
 };
 
-type DemoPattern =
-  | "press"
-  | "pull"
-  | "squat"
-  | "hinge"
-  | "curl"
-  | "raise"
-  | "brace";
-
-function getDemoPattern(exercise: ExerciseLibraryItem): DemoPattern {
+function getMotionLabel(exercise: ExerciseLibraryItem) {
   const name = exercise.exercise.toLowerCase();
   const group = exercise.muscleGroup.toLowerCase();
+
+  if (name.includes("squat")) {
+    return "Descend with control, keep pressure through the foot, then drive up hard.";
+  }
 
   if (
     name.includes("deadlift") ||
     name.includes("thrust") ||
     name.includes("pull-through")
   ) {
-    return "hinge";
-  }
-
-  if (name.includes("squat") || (name.includes("press") && group.includes("quad"))) {
-    return "squat";
-  }
-
-  if (name.includes("curl")) {
-    return "curl";
-  }
-
-  if (name.includes("raise") || name.includes("fly") || name.includes("face pull")) {
-    return "raise";
-  }
-
-  if (name.includes("plank") || group.includes("core")) {
-    return "brace";
-  }
-
-  if (group.includes("back") || group.includes("bicep")) {
-    return "pull";
-  }
-
-  return "press";
-}
-
-function getMotionLabel(exercise: ExerciseLibraryItem) {
-  const pattern = getDemoPattern(exercise);
-  const group = exercise.muscleGroup.toLowerCase();
-
-  if (pattern === "squat") {
-    return "Descend with control, keep pressure through the foot, then drive up hard.";
-  }
-
-  if (pattern === "hinge") {
     return "Push the hips back, keep tension through the posterior chain, then squeeze through.";
   }
 
-  if (pattern === "pull") {
+  if (group.includes("back")) {
     return "Reach into the stretch, pull through the elbow, then return under control.";
   }
 
-  if (pattern === "curl") {
+  if (name.includes("curl")) {
     return "Keep the upper arm quiet, curl with control, and avoid swinging the weight.";
   }
 
-  if (pattern === "raise") {
+  if (name.includes("raise") || name.includes("fly") || name.includes("face pull")) {
     return "Lead with the target muscle, pause briefly, and lower slowly.";
   }
 
-  if (pattern === "brace") {
+  if (name.includes("plank") || group.includes("core")) {
     return "Brace hard, hold position, and keep breathing controlled.";
   }
 
@@ -151,6 +112,18 @@ function getCommonMistakes(exercise: ExerciseLibraryItem) {
   ];
 }
 
+function getDemoMedia(exerciseName: string) {
+  if (exerciseName.trim().toLowerCase() === "bench press") {
+    return {
+      src: "/bench-press-demo.jpg",
+      alt: "Bench press demo showing a lifter pressing a barbell on a flat bench",
+      caption: "Bench Press demo: bar path, planted feet, and controlled press position.",
+    };
+  }
+
+  return null;
+}
+
 export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
   if (!exercise) {
     return (
@@ -160,7 +133,7 @@ export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
     );
   }
 
-  const pattern = getDemoPattern(exercise);
+  const demoMedia = getDemoMedia(exercise.exercise);
   const commonMistakes = getCommonMistakes(exercise);
   const demoSteps = [
     {
@@ -195,24 +168,24 @@ export function ExerciseDemo({ exercise }: ExerciseDemoProps) {
       </div>
 
       <div className="mb-4 rounded-lg border border-gray-800 bg-gray-950 p-4">
-        <div className={"exercise-demo-stage exercise-demo-" + pattern}>
-          <div className="exercise-demo-body">
-            <span className="exercise-demo-head" />
-            <span className="exercise-demo-torso" />
-            <span className="exercise-demo-arm exercise-demo-arm-left" />
-            <span className="exercise-demo-arm exercise-demo-arm-right" />
-            <span className="exercise-demo-leg exercise-demo-leg-left" />
-            <span className="exercise-demo-leg exercise-demo-leg-right" />
+        {demoMedia ? (
+          <div>
+            <div className="overflow-hidden rounded-lg border border-cyan-500/20 bg-gray-900">
+              <Image
+                src={demoMedia.src}
+                alt={demoMedia.alt}
+                width={1536}
+                height={1024}
+                className="aspect-video w-full object-cover"
+              />
+            </div>
+            <p className="mt-3 text-sm text-gray-300">{demoMedia.caption}</p>
           </div>
-          <div className="exercise-demo-track" />
-          <div className="exercise-demo-load" />
-          <div className="absolute bottom-3 left-6 right-6 flex justify-between text-xs font-semibold uppercase tracking-wide text-gray-500">
-            <span>Start</span>
-            <span>Control</span>
-            <span>Finish</span>
+        ) : (
+          <div className="rounded-lg border border-dashed border-gray-800 bg-gray-900 p-5 text-sm text-gray-400">
+            Demo image or video coming soon for this exercise.
           </div>
-        </div>
-        <p className="mt-3 text-sm text-gray-300">{getMotionLabel(exercise)}</p>
+        )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
