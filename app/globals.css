@@ -237,11 +237,217 @@ main > section > div[class*="rounded-lg"]:first-child > * {
   z-index: 1;
 }
 
+.exercise-demo-stage {
+  position: relative;
+  min-height: 10rem;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background:
+    radial-gradient(circle at 72% 34%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 10rem),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface-strong));
+}
+
+.exercise-demo-track {
+  position: absolute;
+  left: 1.5rem;
+  right: 1.5rem;
+  top: 50%;
+  height: 0.25rem;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+}
+
+.exercise-demo-load {
+  position: absolute;
+  left: 2rem;
+  top: 50%;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid color-mix(in srgb, var(--accent-hover) 70%, white);
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+  box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 58%, transparent);
+  transform: translateY(-50%);
+  animation: demo-press 2.8s ease-in-out infinite;
+}
+
+.exercise-demo-body {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5.5rem;
+  height: 6.5rem;
+  transform: translate(-50%, -48%);
+  opacity: 0.82;
+}
+
+.exercise-demo-head,
+.exercise-demo-torso,
+.exercise-demo-arm,
+.exercise-demo-leg {
+  position: absolute;
+  display: block;
+  background: color-mix(in srgb, var(--foreground) 75%, var(--accent));
+}
+
+.exercise-demo-head {
+  left: 2.25rem;
+  top: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+}
+
+.exercise-demo-torso {
+  left: 2.52rem;
+  top: 1.25rem;
+  width: 0.45rem;
+  height: 2.7rem;
+  border-radius: 999px;
+  transform-origin: top center;
+}
+
+.exercise-demo-arm,
+.exercise-demo-leg {
+  width: 0.35rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  transform-origin: top center;
+}
+
+.exercise-demo-arm-left {
+  left: 2.55rem;
+  top: 1.45rem;
+  transform: rotate(58deg);
+}
+
+.exercise-demo-arm-right {
+  left: 2.55rem;
+  top: 1.45rem;
+  transform: rotate(-58deg);
+}
+
+.exercise-demo-leg-left {
+  left: 2.58rem;
+  top: 3.8rem;
+  transform: rotate(24deg);
+}
+
+.exercise-demo-leg-right {
+  left: 2.58rem;
+  top: 3.8rem;
+  transform: rotate(-24deg);
+}
+
+.exercise-demo-pull .exercise-demo-load {
+  animation-name: demo-pull;
+}
+
+.exercise-demo-squat .exercise-demo-load,
+.exercise-demo-hinge .exercise-demo-load {
+  left: 50%;
+  animation-name: demo-squat;
+}
+
+.exercise-demo-curl .exercise-demo-load,
+.exercise-demo-raise .exercise-demo-load {
+  left: 42%;
+  animation-name: demo-raise;
+}
+
+.exercise-demo-brace .exercise-demo-load {
+  left: 50%;
+  animation-name: demo-brace;
+}
+
+.exercise-demo-squat .exercise-demo-body {
+  animation: demo-body-squat 2.8s ease-in-out infinite;
+}
+
+.exercise-demo-hinge .exercise-demo-torso {
+  animation: demo-body-hinge 2.8s ease-in-out infinite;
+}
+
+@keyframes demo-press {
+  0%,
+  100% {
+    transform: translate(0, -50%);
+  }
+  50% {
+    transform: translate(70%, -50%);
+  }
+}
+
+@keyframes demo-pull {
+  0%,
+  100% {
+    transform: translate(72%, -50%);
+  }
+  50% {
+    transform: translate(0, -50%);
+  }
+}
+
+@keyframes demo-squat {
+  0%,
+  100% {
+    transform: translate(-50%, -88%);
+  }
+  50% {
+    transform: translate(-50%, -12%);
+  }
+}
+
+@keyframes demo-raise {
+  0%,
+  100% {
+    transform: translate(-50%, 22%);
+  }
+  50% {
+    transform: translate(-50%, -112%);
+  }
+}
+
+@keyframes demo-brace {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+@keyframes demo-body-squat {
+  0%,
+  100% {
+    transform: translate(-50%, -48%);
+  }
+  50% {
+    transform: translate(-50%, -32%);
+  }
+}
+
+@keyframes demo-body-hinge {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(48deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   a:hover,
   button:hover,
-  summary:hover {
+  summary:hover,
+  .exercise-demo-load,
+  .exercise-demo-body,
+  .exercise-demo-torso {
+    animation: none !important;
     transition: none !important;
     transform: none !important;
   }
