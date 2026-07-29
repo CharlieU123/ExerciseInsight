@@ -462,13 +462,6 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
                 </path>
               );
             })}
-
-            <text x="48" y="360" className="fill-slate-500 text-xl font-bold">
-              R
-            </text>
-            <text x="240" y="360" className="fill-slate-500 text-xl font-bold">
-              L
-            </text>
           </svg>
         </div>
 
