@@ -25,7 +25,7 @@ function getMotionLabel(exercise: ExerciseLibraryItem) {
   }
 
   if (name.includes("curl")) {
-    return "Keep the upper arm quiet, curl with control, and avoid swinging the weight.";
+    return "Keep your elbows mostly still, curl the weight smoothly, and lower it under control.";
   }
 
   if (name.includes("raise") || name.includes("fly") || name.includes("face pull")) {
