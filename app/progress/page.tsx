@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CollapsibleSection } from "../components/CollapsibleSection";
+import { SorenessHeatmap } from "../components/SorenessHeatmap";
 import {
   getDeloadRecommendation,
   getExerciseAverageRir,
@@ -812,21 +813,24 @@ export default function ProgressPage() {
           title="Deload Recommendation"
           description="Looks at recent soreness, hard sets, and workout feeling."
         >
-          <div
-            className={
-              "rounded-lg border p-5 " +
-              getDeloadToneClasses(deloadRecommendation.tone)
-            }
-          >
-            <p className="text-sm font-semibold uppercase tracking-wide opacity-80">
-              Recovery Status
-            </p>
-            <h3 className="mt-2 text-2xl font-bold">
-              {deloadRecommendation.action}
-            </h3>
-            <p className="mt-2 text-sm opacity-90">
-              {deloadRecommendation.detail}
-            </p>
+          <div className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+            <div
+              className={
+                "rounded-lg border p-5 " +
+                getDeloadToneClasses(deloadRecommendation.tone)
+              }
+            >
+              <p className="text-sm font-semibold uppercase tracking-wide opacity-80">
+                Recovery Status
+              </p>
+              <h3 className="mt-2 text-2xl font-bold">
+                {deloadRecommendation.action}
+              </h3>
+              <p className="mt-2 text-sm opacity-90">
+                {deloadRecommendation.detail}
+              </p>
+            </div>
+            <SorenessHeatmap workouts={workouts} />
           </div>
         </CollapsibleSection>
         </div>

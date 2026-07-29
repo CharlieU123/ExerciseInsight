@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { EmptyState } from "./components/EmptyState";
+import { SorenessHeatmap } from "./components/SorenessHeatmap";
 import {
   getDeloadRecommendation,
   getProgramDays,
@@ -292,6 +293,8 @@ export default function HomePage() {
                   </p>
                 </div>
               </div>
+
+              <SorenessHeatmap workouts={workouts} />
 
               <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
                 <p className="text-sm text-gray-400">Last Exercise Snapshot</p>
