@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   anatomyMuscleRegions,
-  type AnatomySide,
   type MuscleRegion,
 } from "../lib/anatomyHeatmap";
 import type { Workout } from "../lib/fitnessData";
@@ -130,28 +129,109 @@ function BodyOutline() {
         strokeLinecap="round"
         strokeWidth="28"
       />
+      <path
+        d="M150 103 L150 333"
+        className="fill-none stroke-white/10"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M121 190 C135 198 165 198 179 190"
+        className="fill-none stroke-white/10"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M118 238 C136 247 164 247 182 238"
+        className="fill-none stroke-white/10"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M111 333 C129 344 171 344 189 333"
+        className="fill-none stroke-white/10"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
     </g>
   );
 }
 
-function getDefaultRegionId(side: AnatomySide) {
-  return side === "front" ? "front-left-pec" : "back-left-lat";
+function AnatomyFigure({
+  side,
+  selectedRegionId,
+  hoveredRegionId,
+  sorenessValues,
+  onSelectRegion,
+  onHoverRegion,
+}: {
+  side: "front" | "back";
+  selectedRegionId: string;
+  hoveredRegionId: string | null;
+  sorenessValues: MuscleSoreness[];
+  onSelectRegion: (regionId: string) => void;
+  onHoverRegion: (regionId: string | null) => void;
+}) {
+  const visibleRegions = anatomyMuscleRegions.filter((region) => region.side === side);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+      <p className="mb-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+        {side}
+      </p>
+      <svg
+        role="img"
+        aria-label={`${side} human body soreness heatmap`}
+        viewBox="0 0 300 610"
+        className="mx-auto h-[26rem] w-full max-w-[210px]"
+        onMouseLeave={() => onHoverRegion(null)}
+      >
+        <BodyOutline />
+        {visibleRegions.map((region) => {
+          const soreness = getRegionSoreness(region, sorenessValues);
+          const isSelected = region.id === (hoveredRegionId ?? selectedRegionId);
+
+          return (
+            <path
+              key={region.id}
+              id={region.id}
+              d={region.d}
+              role="button"
+              tabIndex={0}
+              data-muscle-group={region.muscleGroups.join(",")}
+              aria-label={`${region.label}: ${getSorenessLabel(soreness)}`}
+              className={
+                getHeatClasses(soreness, isSelected) +
+                " cursor-pointer transition duration-200 hover:brightness-125 focus:outline-none"
+              }
+              onClick={() => onSelectRegion(region.id)}
+              onFocus={() => onHoverRegion(region.id)}
+              onBlur={() => onHoverRegion(null)}
+              onMouseEnter={() => onHoverRegion(region.id)}
+            >
+              <title>
+                {region.label}: {getSorenessLabel(soreness)}
+              </title>
+            </path>
+          );
+        })}
+      </svg>
+    </div>
+  );
 }
 
 export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
-  const [view, setView] = useState<AnatomySide>("front");
-  const [selectedRegionId, setSelectedRegionId] = useState(getDefaultRegionId("front"));
+  const [selectedRegionId, setSelectedRegionId] = useState("front-left-pec");
   const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
   const recentWorkouts = useMemo(() => getRecentWorkouts(workouts, 14), [workouts]);
   const sorenessValues = useMemo(
     () => getSorenessByMuscle(recentWorkouts),
     [recentWorkouts]
   );
-  const visibleRegions = anatomyMuscleRegions.filter((region) => region.side === view);
   const activeRegion =
     anatomyMuscleRegions.find(
       (region) => region.id === (hoveredRegionId ?? selectedRegionId)
-    ) ?? visibleRegions[0];
+    ) ?? anatomyMuscleRegions[0];
   const activeSoreness = activeRegion
     ? getRegionSoreness(activeRegion, sorenessValues)
     : 0;
@@ -188,67 +268,19 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[230px_1fr]">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-          <div className="mb-3 grid grid-cols-2 gap-2">
-            {(["front", "back"] as const).map((side) => (
-              <button
-                key={side}
-                type="button"
-                onClick={() => {
-                  setView(side);
-                  setHoveredRegionId(null);
-                  setSelectedRegionId(getDefaultRegionId(side));
-                }}
-                className={
-                  "rounded-xl px-3 py-2 text-sm font-semibold capitalize transition " +
-                  (view === side
-                    ? "bg-cyan-400 text-gray-950 shadow-lg shadow-cyan-950/30"
-                    : "bg-gray-900 text-gray-300 hover:bg-gray-800")
-                }
-              >
-                {side}
-              </button>
-            ))}
-          </div>
-
-          <svg
-            role="img"
-            aria-label={`${view} human body soreness heatmap`}
-            viewBox="0 0 300 610"
-            className="mx-auto h-[28rem] w-full max-w-[220px]"
-            onMouseLeave={() => setHoveredRegionId(null)}
-          >
-            <BodyOutline />
-            {visibleRegions.map((region) => {
-              const soreness = getRegionSoreness(region, sorenessValues);
-              const isSelected = region.id === (hoveredRegionId ?? selectedRegionId);
-
-              return (
-                <path
-                  key={region.id}
-                  id={region.id}
-                  d={region.d}
-                  role="button"
-                  tabIndex={0}
-                  data-muscle-group={region.muscleGroups.join(",")}
-                  aria-label={`${region.label}: ${getSorenessLabel(soreness)}`}
-                  className={
-                    getHeatClasses(soreness, isSelected) +
-                    " cursor-pointer transition duration-200 hover:brightness-125 focus:outline-none"
-                  }
-                  onClick={() => setSelectedRegionId(region.id)}
-                  onFocus={() => setHoveredRegionId(region.id)}
-                  onBlur={() => setHoveredRegionId(null)}
-                  onMouseEnter={() => setHoveredRegionId(region.id)}
-                >
-                  <title>
-                    {region.label}: {getSorenessLabel(soreness)}
-                  </title>
-                </path>
-              );
-            })}
-          </svg>
+      <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(["front", "back"] as const).map((side) => (
+            <AnatomyFigure
+              key={side}
+              side={side}
+              selectedRegionId={selectedRegionId}
+              hoveredRegionId={hoveredRegionId}
+              sorenessValues={sorenessValues}
+              onSelectRegion={setSelectedRegionId}
+              onHoverRegion={setHoveredRegionId}
+            />
+          ))}
         </div>
 
         <div className="space-y-3">
@@ -293,16 +325,11 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
                   key={entry.muscleGroup}
                   type="button"
                   onClick={() => {
-                    const matchingRegion =
-                      visibleRegions.find((region) =>
-                        region.muscleGroups.includes(entry.muscleGroup)
-                      ) ??
-                      anatomyMuscleRegions.find((region) =>
-                        region.muscleGroups.includes(entry.muscleGroup)
-                      );
+                    const matchingRegion = anatomyMuscleRegions.find((region) =>
+                      region.muscleGroups.includes(entry.muscleGroup)
+                    );
 
                     if (matchingRegion) {
-                      setView(matchingRegion.side);
                       setSelectedRegionId(matchingRegion.id);
                     }
                   }}
