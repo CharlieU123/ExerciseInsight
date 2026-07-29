@@ -12,6 +12,48 @@ type MuscleSoreness = {
   soreness: number;
 };
 
+type HeatmapHotspot = {
+  regionId: string;
+  top: string;
+  left: string;
+  width: string;
+  height: string;
+  radius?: string;
+};
+
+const heatmapHotspots: HeatmapHotspot[] = [
+  { regionId: "front-neck", top: "15%", left: "23.5%", width: "4%", height: "6%" },
+  { regionId: "front-left-deltoid", top: "22%", left: "16.5%", width: "7%", height: "8%" },
+  { regionId: "front-right-deltoid", top: "22%", left: "33%", width: "7%", height: "8%" },
+  { regionId: "front-left-pec", top: "25%", left: "23%", width: "7%", height: "9%" },
+  { regionId: "front-right-pec", top: "25%", left: "30%", width: "7%", height: "9%" },
+  { regionId: "front-left-biceps", top: "31%", left: "13.5%", width: "5%", height: "15%" },
+  { regionId: "front-right-biceps", top: "31%", left: "40%", width: "5%", height: "15%" },
+  { regionId: "front-left-forearm", top: "44%", left: "8.5%", width: "5%", height: "17%" },
+  { regionId: "front-right-forearm", top: "44%", left: "45%", width: "5%", height: "17%" },
+  { regionId: "front-upper-abs", top: "34%", left: "26%", width: "8%", height: "12%" },
+  { regionId: "front-lower-abs", top: "45%", left: "26%", width: "8%", height: "12%" },
+  { regionId: "front-left-quad", top: "57%", left: "22%", width: "6%", height: "20%" },
+  { regionId: "front-right-quad", top: "57%", left: "32%", width: "6%", height: "20%" },
+  { regionId: "front-left-calf", top: "78%", left: "21%", width: "5%", height: "16%" },
+  { regionId: "front-right-calf", top: "78%", left: "34%", width: "5%", height: "16%" },
+  { regionId: "back-neck", top: "14%", left: "68.5%", width: "4%", height: "6%" },
+  { regionId: "back-left-rear-delt", top: "23%", left: "58%", width: "7%", height: "8%" },
+  { regionId: "back-right-rear-delt", top: "23%", left: "77%", width: "7%", height: "8%" },
+  { regionId: "back-left-lat", top: "28%", left: "62%", width: "8%", height: "22%" },
+  { regionId: "back-right-lat", top: "28%", left: "72%", width: "8%", height: "22%" },
+  { regionId: "back-left-triceps", top: "32%", left: "55%", width: "5%", height: "15%" },
+  { regionId: "back-right-triceps", top: "32%", left: "83%", width: "5%", height: "15%" },
+  { regionId: "back-left-forearm", top: "46%", left: "51%", width: "5%", height: "17%" },
+  { regionId: "back-right-forearm", top: "46%", left: "87%", width: "5%", height: "17%" },
+  { regionId: "back-left-glute", top: "52%", left: "64%", width: "7%", height: "11%" },
+  { regionId: "back-right-glute", top: "52%", left: "72%", width: "7%", height: "11%" },
+  { regionId: "back-left-hamstring", top: "63%", left: "63%", width: "6%", height: "19%" },
+  { regionId: "back-right-hamstring", top: "63%", left: "74%", width: "6%", height: "19%" },
+  { regionId: "back-left-calf", top: "82%", left: "62%", width: "5%", height: "13%" },
+  { regionId: "back-right-calf", top: "82%", left: "76%", width: "5%", height: "13%" },
+];
+
 function getRecentWorkouts(workouts: Workout[], daysBack: number) {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysBack);
@@ -61,26 +103,6 @@ function getRegionSoreness(region: MuscleRegion, sorenessValues: MuscleSoreness[
   return Math.max(...matchingValues);
 }
 
-function getHeatClasses(soreness: number, isSelected: boolean) {
-  const selectedClasses = isSelected
-    ? " stroke-cyan-200 stroke-[2.5] drop-shadow-[0_0_18px_rgba(34,211,238,0.45)]"
-    : " stroke-white/80 stroke-[1.4]";
-
-  if (soreness >= 2.5) {
-    return "fill-red-500/90" + selectedClasses;
-  }
-
-  if (soreness >= 1.5) {
-    return "fill-orange-400/90" + selectedClasses;
-  }
-
-  if (soreness > 0) {
-    return "fill-yellow-300/85" + selectedClasses;
-  }
-
-  return "fill-slate-700/75 stroke-slate-500 stroke-[1.2]";
-}
-
 function getSorenessLabel(soreness: number) {
   if (soreness >= 2.5) {
     return "High";
@@ -97,127 +119,30 @@ function getSorenessLabel(soreness: number) {
   return "No soreness";
 }
 
-function BodyOutline() {
-  return (
-    <g aria-hidden="true">
-      <circle cx="150" cy="42" r="30" className="fill-slate-800/70 stroke-white/10" />
-      <path
-        d="M118 101 C122 86 178 86 182 101 L207 320 C209 350 188 374 150 374 C112 374 91 350 93 320 Z"
-        className="fill-slate-900/75 stroke-white/10"
-      />
-      <path
-        d="M88 124 C59 154 49 225 51 324"
-        className="fill-none stroke-slate-800"
-        strokeLinecap="round"
-        strokeWidth="24"
-      />
-      <path
-        d="M212 124 C241 154 251 225 249 324"
-        className="fill-none stroke-slate-800"
-        strokeLinecap="round"
-        strokeWidth="24"
-      />
-      <path
-        d="M122 367 C106 426 100 500 105 590"
-        className="fill-none stroke-slate-800"
-        strokeLinecap="round"
-        strokeWidth="28"
-      />
-      <path
-        d="M178 367 C194 426 200 500 195 590"
-        className="fill-none stroke-slate-800"
-        strokeLinecap="round"
-        strokeWidth="28"
-      />
-      <path
-        d="M150 103 L150 333"
-        className="fill-none stroke-white/10"
-        strokeLinecap="round"
-        strokeWidth="2"
-      />
-      <path
-        d="M121 190 C135 198 165 198 179 190"
-        className="fill-none stroke-white/10"
-        strokeLinecap="round"
-        strokeWidth="2"
-      />
-      <path
-        d="M118 238 C136 247 164 247 182 238"
-        className="fill-none stroke-white/10"
-        strokeLinecap="round"
-        strokeWidth="2"
-      />
-      <path
-        d="M111 333 C129 344 171 344 189 333"
-        className="fill-none stroke-white/10"
-        strokeLinecap="round"
-        strokeWidth="2"
-      />
-    </g>
-  );
-}
+function getHotspotClasses(soreness: number, isSelected: boolean) {
+  const baseClasses =
+    "absolute cursor-pointer border transition duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-200";
 
-function AnatomyFigure({
-  side,
-  selectedRegionId,
-  hoveredRegionId,
-  sorenessValues,
-  onSelectRegion,
-  onHoverRegion,
-}: {
-  side: "front" | "back";
-  selectedRegionId: string;
-  hoveredRegionId: string | null;
-  sorenessValues: MuscleSoreness[];
-  onSelectRegion: (regionId: string) => void;
-  onHoverRegion: (regionId: string | null) => void;
-}) {
-  const visibleRegions = anatomyMuscleRegions.filter((region) => region.side === side);
+  if (isSelected) {
+    return (
+      baseClasses +
+      " border-cyan-200 bg-cyan-300/35 shadow-[0_0_24px_rgba(34,211,238,0.5)]"
+    );
+  }
 
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-      <p className="mb-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-        {side}
-      </p>
-      <svg
-        role="img"
-        aria-label={`${side} human body soreness heatmap`}
-        viewBox="0 0 300 610"
-        className="mx-auto h-[26rem] w-full max-w-[210px]"
-        onMouseLeave={() => onHoverRegion(null)}
-      >
-        <BodyOutline />
-        {visibleRegions.map((region) => {
-          const soreness = getRegionSoreness(region, sorenessValues);
-          const isSelected = region.id === (hoveredRegionId ?? selectedRegionId);
+  if (soreness >= 2.5) {
+    return baseClasses + " border-red-200/70 bg-red-500/45 hover:bg-red-500/60";
+  }
 
-          return (
-            <path
-              key={region.id}
-              id={region.id}
-              d={region.d}
-              role="button"
-              tabIndex={0}
-              data-muscle-group={region.muscleGroups.join(",")}
-              aria-label={`${region.label}: ${getSorenessLabel(soreness)}`}
-              className={
-                getHeatClasses(soreness, isSelected) +
-                " cursor-pointer transition duration-200 hover:brightness-125 focus:outline-none"
-              }
-              onClick={() => onSelectRegion(region.id)}
-              onFocus={() => onHoverRegion(region.id)}
-              onBlur={() => onHoverRegion(null)}
-              onMouseEnter={() => onHoverRegion(region.id)}
-            >
-              <title>
-                {region.label}: {getSorenessLabel(soreness)}
-              </title>
-            </path>
-          );
-        })}
-      </svg>
-    </div>
-  );
+  if (soreness >= 1.5) {
+    return baseClasses + " border-orange-100/70 bg-orange-400/45 hover:bg-orange-400/60";
+  }
+
+  if (soreness > 0) {
+    return baseClasses + " border-yellow-100/70 bg-yellow-300/40 hover:bg-yellow-300/55";
+  }
+
+  return baseClasses + " border-transparent bg-transparent hover:border-cyan-200/50 hover:bg-cyan-300/15";
 }
 
 export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
@@ -268,19 +193,61 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(["front", "back"] as const).map((side) => (
-            <AnatomyFigure
-              key={side}
-              side={side}
-              selectedRegionId={selectedRegionId}
-              hoveredRegionId={hoveredRegionId}
-              sorenessValues={sorenessValues}
-              onSelectRegion={setSelectedRegionId}
-              onHoverRegion={setHoveredRegionId}
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-2xl border border-white/10 bg-slate-100 p-3">
+          <div
+            className="relative mx-auto max-w-3xl overflow-hidden rounded-xl"
+            onMouseLeave={() => setHoveredRegionId(null)}
+          >
+            <img
+              src="/muscles-front-back.svg"
+              alt="Front and back human muscular anatomy"
+              className="w-full select-none"
+              draggable={false}
             />
-          ))}
+            {heatmapHotspots.map((hotspot) => {
+              const region = anatomyMuscleRegions.find(
+                (muscleRegion) => muscleRegion.id === hotspot.regionId
+              );
+
+              if (!region) {
+                return null;
+              }
+
+              const soreness = getRegionSoreness(region, sorenessValues);
+              const isSelected = region.id === (hoveredRegionId ?? selectedRegionId);
+
+              return (
+                <button
+                  key={hotspot.regionId}
+                  id={region.id}
+                  type="button"
+                  data-muscle-group={region.muscleGroups.join(",")}
+                  aria-label={`${region.label}: ${getSorenessLabel(soreness)}`}
+                  className={getHotspotClasses(soreness, isSelected)}
+                  style={{
+                    top: hotspot.top,
+                    left: hotspot.left,
+                    width: hotspot.width,
+                    height: hotspot.height,
+                    borderRadius: hotspot.radius ?? "999px",
+                  }}
+                  onClick={() => setSelectedRegionId(region.id)}
+                  onFocus={() => setHoveredRegionId(region.id)}
+                  onBlur={() => setHoveredRegionId(null)}
+                  onMouseEnter={() => setHoveredRegionId(region.id)}
+                >
+                  <span className="sr-only">
+                    {region.label}: {getSorenessLabel(soreness)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-center text-xs text-slate-500">
+            Anatomy image adapted from Wikimedia Commons. Heatmap overlays are
+            generated from your logged soreness.
+          </p>
         </div>
 
         <div className="space-y-3">
