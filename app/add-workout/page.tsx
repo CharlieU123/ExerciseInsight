@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { EmptyState } from "../components/EmptyState";
 import { ExerciseDemo } from "../components/ExerciseDemo";
@@ -87,6 +88,18 @@ type ActiveWorkoutDraft = {
   currentExercises: ExerciseEntry[];
   completedSetIds: Record<string, boolean>;
   activeStartedAt: number;
+};
+
+type CompletedWorkoutSummary = {
+  title: string;
+  durationMinutes: number;
+  workingSets: number;
+  volume: number;
+  averageRir: number;
+  personalRecords: number;
+  muscleInsight: string;
+  workout: Workout;
+  shareText: string;
 };
 
 function getTodayInputDate() {
@@ -349,6 +362,196 @@ function getSwapSuggestions(
     .slice(0, 5);
 }
 
+function getSetVolume(setEntry: SetEntry) {
+  const weight = Number(setEntry.weight);
+  const reps = Number(setEntry.reps);
+
+  if (Number.isNaN(weight) || Number.isNaN(reps)) {
+    return 0;
+  }
+
+  return weight * reps;
+}
+
+function getWorkoutVolume(workout: Workout) {
+  return workout.exercises.reduce(
+    (workoutTotal, exerciseEntry) =>
+      workoutTotal +
+      getExerciseSetEntries(exerciseEntry).reduce(
+        (exerciseTotal, setEntry) => exerciseTotal + getSetVolume(setEntry),
+        0
+      ),
+    0
+  );
+}
+
+function getWorkoutWorkingSets(workout: Workout) {
+  return workout.exercises.reduce(
+    (totalSets, exerciseEntry) =>
+      totalSets + getExerciseSetEntries(exerciseEntry).length,
+    0
+  );
+}
+
+function getWorkoutAverageRir(workout: Workout) {
+  const rirValues = workout.exercises.flatMap((exerciseEntry) =>
+    getExerciseSetEntries(exerciseEntry)
+      .map((setEntry) => Number(setEntry.rir))
+      .filter((rirValue) => !Number.isNaN(rirValue))
+  );
+
+  if (rirValues.length === 0) {
+    return 0;
+  }
+
+  const averageRir =
+    rirValues.reduce((total, rirValue) => total + rirValue, 0) / rirValues.length;
+
+  return Math.round(averageRir * 10) / 10;
+}
+
+function getWorkoutTitle(workout: Workout) {
+  const programDayMatch = workout.notes.match(/Started from .+ - ([^.]+)\./);
+
+  if (programDayMatch?.[1]) {
+    return `${programDayMatch[1]} Complete`;
+  }
+
+  const firstExercise = workout.exercises[0];
+
+  if (firstExercise) {
+    return `${firstExercise.muscleGroup} Workout Complete`;
+  }
+
+  return "Workout Complete";
+}
+
+function getPersonalRecordCount(newWorkout: Workout, previousWorkouts: Workout[]) {
+  return newWorkout.exercises.reduce((recordCount, exerciseEntry) => {
+    const currentTopWeight = getExerciseTopWeight(exerciseEntry);
+    const previousBestWeight = Math.max(
+      0,
+      ...previousWorkouts.flatMap((workout) =>
+        workout.exercises
+          .filter(
+            (previousExercise) =>
+              normalizeText(previousExercise.exercise) ===
+              normalizeText(exerciseEntry.exercise)
+          )
+          .map((previousExercise) => getExerciseTopWeight(previousExercise))
+      )
+    );
+
+    return currentTopWeight > previousBestWeight ? recordCount + 1 : recordCount;
+  }, 0);
+}
+
+function getMuscleVolumeInsight(newWorkout: Workout, previousWorkouts: Workout[]) {
+  const currentMuscleVolumes = new Map<string, number>();
+
+  newWorkout.exercises.forEach((exerciseEntry) => {
+    const exerciseVolume = getExerciseSetEntries(exerciseEntry).reduce(
+      (totalVolume, setEntry) => totalVolume + getSetVolume(setEntry),
+      0
+    );
+
+    currentMuscleVolumes.set(
+      exerciseEntry.muscleGroup,
+      (currentMuscleVolumes.get(exerciseEntry.muscleGroup) ?? 0) + exerciseVolume
+    );
+  });
+
+  const topMuscleEntry = Array.from(currentMuscleVolumes.entries()).sort(
+    (firstEntry, secondEntry) => secondEntry[1] - firstEntry[1]
+  )[0];
+
+  if (!topMuscleEntry) {
+    return "Log more workouts to unlock muscle-volume comparisons.";
+  }
+
+  const [topMuscle, currentVolume] = topMuscleEntry;
+  const workoutDate = new Date(newWorkout.dateISO);
+  const previousWindowStart = new Date(workoutDate);
+  previousWindowStart.setDate(previousWindowStart.getDate() - 7);
+
+  const previousVolume = previousWorkouts.reduce((totalVolume, workout) => {
+    const previousWorkoutDate = new Date(workout.dateISO);
+
+    if (previousWorkoutDate < previousWindowStart || previousWorkoutDate >= workoutDate) {
+      return totalVolume;
+    }
+
+    return (
+      totalVolume +
+      workout.exercises
+        .filter((exerciseEntry) => exerciseEntry.muscleGroup === topMuscle)
+        .reduce(
+          (exerciseTotal, exerciseEntry) =>
+            exerciseTotal +
+            getExerciseSetEntries(exerciseEntry).reduce(
+              (setTotal, setEntry) => setTotal + getSetVolume(setEntry),
+              0
+            ),
+          0
+        )
+    );
+  }, 0);
+
+  if (previousVolume === 0) {
+    return `${topMuscle} volume is now being tracked. Add another week to compare trends.`;
+  }
+
+  const percentChange = Math.round(
+    ((currentVolume - previousVolume) / previousVolume) * 100
+  );
+
+  if (percentChange > 0) {
+    return `${topMuscle} volume increased ${percentChange}% from the previous 7 days.`;
+  }
+
+  if (percentChange < 0) {
+    return `${topMuscle} volume decreased ${Math.abs(
+      percentChange
+    )}% from the previous 7 days.`;
+  }
+
+  return `${topMuscle} volume matched the previous 7 days.`;
+}
+
+function buildShareText(summary: Omit<CompletedWorkoutSummary, "shareText">) {
+  return [
+    `${summary.title}`,
+    `Duration: ${summary.durationMinutes} min`,
+    `Working sets: ${summary.workingSets}`,
+    `Volume: ${summary.volume.toLocaleString()} lb`,
+    `Average RIR: ${summary.averageRir}`,
+    `Personal records: ${summary.personalRecords}`,
+    summary.muscleInsight,
+  ].join("\n");
+}
+
+function buildCompletedWorkoutSummary(
+  savedWorkout: Workout,
+  previousWorkouts: Workout[],
+  durationSeconds: number
+): CompletedWorkoutSummary {
+  const summaryWithoutShareText = {
+    title: getWorkoutTitle(savedWorkout),
+    durationMinutes: Math.max(1, Math.round(durationSeconds / 60)),
+    workingSets: getWorkoutWorkingSets(savedWorkout),
+    volume: getWorkoutVolume(savedWorkout),
+    averageRir: getWorkoutAverageRir(savedWorkout),
+    personalRecords: getPersonalRecordCount(savedWorkout, previousWorkouts),
+    muscleInsight: getMuscleVolumeInsight(savedWorkout, previousWorkouts),
+    workout: savedWorkout,
+  };
+
+  return {
+    ...summaryWithoutShareText,
+    shareText: buildShareText(summaryWithoutShareText),
+  };
+}
+
 export default function AddWorkoutPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedLibraryExercise, setSelectedLibraryExercise] = useState("");
@@ -385,6 +588,9 @@ export default function AddWorkoutPage() {
     useState(defaultRestSeconds);
   const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
   const [swapExerciseId, setSwapExerciseId] = useState<AppId | null>(null);
+  const [completedWorkoutSummary, setCompletedWorkoutSummary] =
+    useState<CompletedWorkoutSummary | null>(null);
+  const [shareMessage, setShareMessage] = useState("");
 
   useEffect(() => {
     async function loadSavedWorkouts() {
@@ -1126,8 +1332,12 @@ export default function AddWorkoutPage() {
     }
 
     const selectedDate = new Date(workoutDate + "T12:00:00");
+    const durationSeconds = Math.max(
+      60,
+      Math.floor((Date.now() - activeStartedAt) / 1000)
+    );
 
-    const newWorkout = {
+    const newWorkout: Workout = {
       id: Date.now(),
       date: formatWorkoutDate(workoutDate),
       dateISO: selectedDate.toISOString(),
@@ -1135,10 +1345,12 @@ export default function AddWorkoutPage() {
       notes,
       exercises: currentExercises,
     };
+    let savedWorkoutForSummary = newWorkout;
 
     if (userId) {
       try {
         const savedWorkout = await saveWorkoutToSupabase(newWorkout);
+        savedWorkoutForSummary = savedWorkout;
         setWorkouts([savedWorkout, ...workouts]);
         setSaveMessage("Workout saved to Supabase.");
       } catch {
@@ -1150,6 +1362,10 @@ export default function AddWorkoutPage() {
       setSaveMessage("Workout saved on this device.");
     }
 
+    setCompletedWorkoutSummary(
+      buildCompletedWorkoutSummary(savedWorkoutForSummary, workouts, durationSeconds)
+    );
+    setShareMessage("");
     setCurrentExercises([]);
     setCompletedSetIds({});
     setActiveStartedAt(Date.now());
@@ -1160,6 +1376,54 @@ export default function AddWorkoutPage() {
     setFeeling("");
     setNotes("");
     localStorage.removeItem(activeWorkoutDraftKey);
+  }
+
+  function finishCompletedSummary() {
+    setCompletedWorkoutSummary(null);
+    setShareMessage("");
+  }
+
+  function editCompletedWorkout() {
+    if (!completedWorkoutSummary) {
+      return;
+    }
+
+    setCurrentExercises(completedWorkoutSummary.workout.exercises);
+    setWorkoutDate(completedWorkoutSummary.workout.dateISO.slice(0, 10));
+    setFeeling(completedWorkoutSummary.workout.feeling);
+    setNotes(completedWorkoutSummary.workout.notes);
+    setCompletedSetIds({});
+    setActiveStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setRestRemainingSeconds(restSeconds);
+    setIsRestTimerRunning(false);
+    setCompletedWorkoutSummary(null);
+    setShareMessage("");
+    setSaveMessage(
+      "Reopened that workout as an editable draft. Saving again creates a new saved version."
+    );
+  }
+
+  async function shareCompletedWorkout() {
+    if (!completedWorkoutSummary) {
+      return;
+    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: completedWorkoutSummary.title,
+          text: completedWorkoutSummary.shareText,
+        });
+        setShareMessage("Workout summary shared.");
+        return;
+      }
+
+      await navigator.clipboard.writeText(completedWorkoutSummary.shareText);
+      setShareMessage("Workout summary copied to clipboard.");
+    } catch {
+      setShareMessage("Could not share this workout summary.");
+    }
   }
 
   function addVoiceNote(transcript: string) {
@@ -1212,6 +1476,106 @@ export default function AddWorkoutPage() {
             </p>
           )}
         </div>
+
+        {completedWorkoutSummary && (
+          <section className="mb-8 rounded-2xl border border-green-400/30 bg-green-950/20 p-5 shadow-[0_0_40px_rgba(34,197,94,0.14)] sm:p-6">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-green-300">
+                  Workout Complete
+                </p>
+                <h2 className="text-3xl font-bold">
+                  {completedWorkoutSummary.title}
+                </h2>
+                <p className="mt-2 text-gray-300">
+                  {completedWorkoutSummary.muscleInsight}
+                </p>
+              </div>
+              <span className="w-fit rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-sm font-semibold text-green-200">
+                Saved
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <div className="rounded-xl border border-white/10 bg-gray-950/70 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Duration
+                </p>
+                <p className="mt-2 text-2xl font-bold">
+                  {completedWorkoutSummary.durationMinutes} min
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-gray-950/70 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Working Sets
+                </p>
+                <p className="mt-2 text-2xl font-bold">
+                  {completedWorkoutSummary.workingSets}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-gray-950/70 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Volume
+                </p>
+                <p className="mt-2 text-2xl font-bold">
+                  {completedWorkoutSummary.volume.toLocaleString()} lb
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-gray-950/70 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Average RIR
+                </p>
+                <p className="mt-2 text-2xl font-bold">
+                  {completedWorkoutSummary.averageRir}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-gray-950/70 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Personal Records
+                </p>
+                <p className="mt-2 text-2xl font-bold">
+                  {completedWorkoutSummary.personalRecords}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/progress"
+                className="rounded-md bg-blue-600 px-4 py-3 text-center font-semibold hover:bg-blue-500"
+              >
+                View insights
+              </Link>
+              <button
+                type="button"
+                onClick={shareCompletedWorkout}
+                className="rounded-md bg-gray-800 px-4 py-3 font-semibold hover:bg-gray-700"
+              >
+                Share result
+              </button>
+              <button
+                type="button"
+                onClick={editCompletedWorkout}
+                className="rounded-md bg-gray-800 px-4 py-3 font-semibold hover:bg-gray-700"
+              >
+                Edit workout
+              </button>
+              <button
+                type="button"
+                onClick={finishCompletedSummary}
+                className="rounded-md bg-green-600 px-4 py-3 font-semibold hover:bg-green-500"
+              >
+                Finish
+              </button>
+            </div>
+
+            {shareMessage && (
+              <p className="mt-3 text-sm font-semibold text-green-200">
+                {shareMessage}
+              </p>
+            )}
+          </section>
+        )}
 
         <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
           <div className="space-y-6">
