@@ -13,12 +13,23 @@ import {
   loadProfile,
   loadTrainingPrograms,
   loadWorkouts,
+  saveFitnessGoals,
+  saveProfile,
+  saveTrainingPrograms,
+  saveWorkouts,
   summarizeExerciseSets,
   type FitnessGoal,
   type Profile,
   type TrainingProgram,
   type Workout,
 } from "./lib/fitnessData";
+import {
+  demoBodyweightLogs,
+  demoGoals,
+  demoProfile,
+  demoPrograms,
+  demoWorkouts,
+} from "./lib/demoData";
 import {
   loadGoalsFromSupabase,
   loadProgramsFromSupabase,
@@ -73,6 +84,7 @@ export default function HomePage() {
     height: "",
     weight: "",
   });
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -124,6 +136,49 @@ export default function HomePage() {
 
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    setIsDemoMode(localStorage.getItem("exerciseinsight-demo-mode") === "true");
+  }, []);
+
+  function loadDemoDashboard() {
+    saveWorkouts(demoWorkouts);
+    saveFitnessGoals(demoGoals);
+    saveTrainingPrograms(demoPrograms);
+    saveProfile(demoProfile);
+    localStorage.setItem(
+      "exerciseinsight-bodyweight-logs",
+      JSON.stringify(demoBodyweightLogs)
+    );
+    localStorage.setItem("exerciseinsight-demo-mode", "true");
+
+    setWorkouts(demoWorkouts);
+    setGoals(demoGoals);
+    setPrograms(demoPrograms);
+    setProfile(demoProfile);
+    setIsDemoMode(true);
+  }
+
+  function clearDemoDashboard() {
+    localStorage.removeItem("workouts");
+    localStorage.removeItem("fitnessGoals");
+    localStorage.removeItem("trainingPrograms");
+    localStorage.removeItem("profile");
+    localStorage.removeItem("exerciseinsight-bodyweight-logs");
+    localStorage.removeItem("exerciseinsight-demo-mode");
+
+    setWorkouts([]);
+    setGoals([]);
+    setPrograms([]);
+    setProfile({
+      name: "",
+      gender: "",
+      age: "",
+      height: "",
+      weight: "",
+    });
+    setIsDemoMode(false);
+  }
 
   const lastWorkout = workouts[0];
   const lastExercise = lastWorkout?.exercises[0];
@@ -196,6 +251,47 @@ export default function HomePage() {
             >
               Manage Program
             </Link>
+          </div>
+        </div>
+
+        <div className="mb-8 rounded-3xl border border-cyan-400/30 bg-cyan-950/20 p-5 shadow-xl shadow-cyan-950/10 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                Demo Mode
+              </p>
+              <h2 className="mt-2 text-2xl font-bold">
+                Explore ExerciseInsight with sample training data
+              </h2>
+              <p className="mt-2 text-sm text-gray-300">
+                Loads a fictional athlete with workouts, goals, a program, PRs,
+                bodyweight logs, soreness, and chart data so the dashboard shows
+                what the app can do.
+              </p>
+              {isDemoMode && (
+                <p className="mt-3 rounded-md border border-cyan-400/20 bg-cyan-400/10 p-3 text-sm font-semibold text-cyan-100">
+                  Sample data is currently active on this device.
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:w-72 lg:grid-cols-1">
+              <button
+                type="button"
+                onClick={loadDemoDashboard}
+                className="rounded-2xl bg-blue-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
+              >
+                Explore Demo Dashboard
+              </button>
+              {isDemoMode && (
+                <button
+                  type="button"
+                  onClick={clearDemoDashboard}
+                  className="rounded-2xl bg-gray-800 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-gray-700"
+                >
+                  Clear Demo Data
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
