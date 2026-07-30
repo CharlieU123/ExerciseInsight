@@ -87,6 +87,7 @@ type AdvancedProgress = {
 type ProgressTab = "Strength" | "Volume" | "Reps" | "Bodyweight";
 type DateRangeFilter = "30" | "90" | "all";
 type TrendMode = "raw" | "smooth";
+type CalendarDayStatus = "completed" | "skipped" | "recovery" | "planned" | "future";
 
 type BodyweightLog = {
   id: number;
@@ -117,13 +118,22 @@ type WorkoutCalendarDay = {
   isFuture: boolean;
   isPlanned: boolean;
   hasPr: boolean;
+  note: string;
   workouts: Workout[];
   workoutType: string;
-  status: "completed" | "skipped" | "recovery" | "future";
+  status: CalendarDayStatus;
+};
+
+type CalendarOverride = {
+  status: Exclude<CalendarDayStatus, "future">;
+  workoutType: string;
+  note: string;
+  hasPr: boolean;
 };
 
 const progressTabs: ProgressTab[] = ["Strength", "Volume", "Reps", "Bodyweight"];
 const bodyweightLogsKey = "exerciseinsight-bodyweight-logs";
+const calendarOverridesKey = "exerciseinsight-calendar-overrides";
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function calculateEstimatedOneRepMax(weight: number, reps: number) {
@@ -915,7 +925,11 @@ function getEstimatedPlannedWeekdays(programs: TrainingProgram[]) {
   return new Set(plannedPatterns[Math.min(Math.max(trainingDayCount, 0), 7)] ?? []);
 }
 
-function buildWorkoutCalendar(workouts: Workout[], programs: TrainingProgram[]) {
+function buildWorkoutCalendar(
+  workouts: Workout[],
+  programs: TrainingProgram[],
+  calendarOverrides: Record<string, CalendarOverride>
+) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -935,17 +949,20 @@ function buildWorkoutCalendar(workouts: Workout[], programs: TrainingProgram[]) 
     const date = new Date(now.getFullYear(), now.getMonth(), dayNumber);
     const dateKey = getDateKey(date);
     const dayWorkouts = workoutsByDate.get(dateKey) ?? [];
+    const dayOverride = calendarOverrides[dateKey];
     const isFuture = date.getTime() > new Date().setHours(23, 59, 59, 999);
     const isPlanned = plannedWeekdays.has(date.getDay());
-    const hasPr = prDateKeys.has(dateKey);
+    const hasPr = prDateKeys.has(dateKey) || dayOverride?.hasPr === true;
     const status =
       dayWorkouts.length > 0
         ? "completed"
-        : isFuture
-          ? "future"
-          : isPlanned
-            ? "skipped"
-            : "recovery";
+        : dayOverride?.status
+          ? dayOverride.status
+          : isFuture
+            ? "future"
+            : isPlanned
+              ? "skipped"
+              : "recovery";
 
     calendarDays.push({
       dateKey,
@@ -953,10 +970,13 @@ function buildWorkoutCalendar(workouts: Workout[], programs: TrainingProgram[]) 
       weekday: date.getDay(),
       isToday: dateKey === getDateKey(now),
       isFuture,
-      isPlanned,
+      isPlanned:
+        isPlanned || dayOverride?.status === "planned" || dayOverride?.status === "skipped",
       hasPr,
+      note: dayOverride?.note ?? "",
       workouts: dayWorkouts,
-      workoutType: dayWorkouts[0] ? getWorkoutType(dayWorkouts[0]) : "",
+      workoutType:
+        dayOverride?.workoutType || (dayWorkouts[0] ? getWorkoutType(dayWorkouts[0]) : ""),
       status,
     });
   }
@@ -981,6 +1001,10 @@ function getCalendarDayClasses(day: WorkoutCalendarDay) {
 
   if (day.status === "skipped") {
     return "border-yellow-400/40 bg-yellow-500/10";
+  }
+
+  if (day.status === "planned") {
+    return "border-purple-400/40 bg-purple-500/10";
   }
 
   if (day.status === "recovery") {
@@ -1062,6 +1086,10 @@ export default function ProgressPage() {
     new Date().toISOString().slice(0, 10)
   );
   const [bodyweightValue, setBodyweightValue] = useState("");
+  const [calendarOverrides, setCalendarOverrides] = useState<
+    Record<string, CalendarOverride>
+  >({});
+  const [selectedCalendarDateKey, setSelectedCalendarDateKey] = useState("");
 
   useEffect(() => {
     async function loadProgressWorkouts() {
@@ -1104,8 +1132,41 @@ export default function ProgressPage() {
   }, []);
 
   useEffect(() => {
+    const loadCalendarOverrides = window.setTimeout(() => {
+      const savedOverrides = localStorage.getItem(calendarOverridesKey);
+
+      if (!savedOverrides) {
+        return;
+      }
+
+      try {
+        const parsedOverrides = JSON.parse(savedOverrides) as Record<
+          string,
+          CalendarOverride
+        >;
+        setCalendarOverrides(
+          parsedOverrides && typeof parsedOverrides === "object"
+            ? parsedOverrides
+            : {}
+        );
+      } catch {
+        localStorage.removeItem(calendarOverridesKey);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(loadCalendarOverrides);
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(bodyweightLogsKey, JSON.stringify(bodyweightLogs));
   }, [bodyweightLogs]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      calendarOverridesKey,
+      JSON.stringify(calendarOverrides)
+    );
+  }, [calendarOverrides]);
 
   function addBodyweightLog(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1131,6 +1192,37 @@ export default function ProgressPage() {
     setBodyweightLogs((currentLogs) =>
       currentLogs.filter((log) => log.id !== id)
     );
+  }
+
+  function updateCalendarOverride(
+    dateKey: string,
+    field: keyof CalendarOverride,
+    value: string | boolean
+  ) {
+    setCalendarOverrides((currentOverrides) => {
+      const currentOverride = currentOverrides[dateKey] ?? {
+        status: "planned",
+        workoutType: "",
+        note: "",
+        hasPr: false,
+      };
+
+      return {
+        ...currentOverrides,
+        [dateKey]: {
+          ...currentOverride,
+          [field]: value,
+        },
+      };
+    });
+  }
+
+  function clearCalendarOverride(dateKey: string) {
+    setCalendarOverrides((currentOverrides) => {
+      const nextOverrides = { ...currentOverrides };
+      delete nextOverrides[dateKey];
+      return nextOverrides;
+    });
   }
 
   const workoutsThisWeek = workouts.filter(isWorkoutThisWeek).length;
@@ -1179,7 +1271,18 @@ export default function ProgressPage() {
   const filteredWeeklyHardSets = calculateWeeklyHardSets(filteredWorkouts);
   const exerciseTrend = buildExerciseTrend(workouts, activeTrendExercise);
   const monthlyRecap = calculateMonthlyRecap(workouts);
-  const workoutCalendar = buildWorkoutCalendar(workouts, programs);
+  const workoutCalendar = buildWorkoutCalendar(
+    workouts,
+    programs,
+    calendarOverrides
+  );
+  const selectedCalendarDay = workoutCalendar.days.find(
+    (day): day is WorkoutCalendarDay =>
+      day !== null && day.dateKey === selectedCalendarDateKey
+  );
+  const selectedCalendarOverride = selectedCalendarDay
+    ? calendarOverrides[selectedCalendarDay.dateKey]
+    : undefined;
   const advancedProgress = calculateAdvancedProgress(workouts);
   const highestTrendEstimate = Math.max(
     ...exerciseTrend.map((trendPoint) => trendPoint.estimatedOneRepMax),
@@ -1590,6 +1693,10 @@ export default function ProgressPage() {
                     Skipped planned
                   </div>
                   <div className="flex items-center gap-2 text-gray-300">
+                    <span className="h-3 w-3 rounded-sm bg-purple-500" />
+                    Planned
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300">
                     <span className="h-3 w-3 rounded-sm bg-cyan-500/50" />
                     Recovery
                   </div>
@@ -1606,21 +1713,28 @@ export default function ProgressPage() {
                 <div className="grid grid-cols-7 gap-2">
                   {workoutCalendar.days.map((day, index) =>
                     day ? (
-                      <div
+                      <button
                         key={day.dateKey}
+                        type="button"
+                        onClick={() => setSelectedCalendarDateKey(day.dateKey)}
                         className={
-                          "min-h-24 rounded-lg border p-2 transition hover:-translate-y-0.5 " +
+                          "min-h-24 rounded-lg border p-2 text-left transition hover:-translate-y-0.5 " +
                           getCalendarDayClasses(day) +
-                          (day.isToday ? " ring-2 ring-blue-400/70" : "")
+                          (day.isToday ? " ring-2 ring-blue-400/70" : "") +
+                          (selectedCalendarDateKey === day.dateKey
+                            ? " outline outline-2 outline-white/70"
+                            : "")
                         }
                         title={`${day.dateKey}: ${
                           day.workouts.length
                             ? `${day.workouts.length} workout(s)`
                             : day.status === "skipped"
                               ? "Skipped planned day"
-                              : day.status === "recovery"
-                                ? "Recovery day"
-                                : "Future day"
+                            : day.status === "recovery"
+                              ? "Recovery day"
+                              : day.status === "planned"
+                                ? "Planned day"
+                              : "Future day"
                         }`}
                       >
                         <div className="mb-2 flex items-start justify-between gap-2">
@@ -1648,12 +1762,17 @@ export default function ProgressPage() {
                               ? "Skipped"
                               : day.status === "recovery"
                                 ? "Recovery"
-                                : day.isPlanned
+                                : day.status === "planned" || day.isPlanned
                                   ? "Planned"
                                   : ""}
                           </p>
                         )}
-                      </div>
+                        {day.note && (
+                          <p className="mt-1 line-clamp-2 text-[10px] text-gray-500">
+                            {day.note}
+                          </p>
+                        )}
+                      </button>
                     ) : (
                       <div
                         key={`empty-${index}`}
@@ -1663,6 +1782,147 @@ export default function ProgressPage() {
                   )}
                 </div>
               </div>
+
+              {selectedCalendarDay && (
+                <div className="rounded-xl border border-blue-500/20 bg-blue-950/20 p-4">
+                  <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-wide text-blue-200">
+                        Edit Calendar Day
+                      </p>
+                      <h3 className="mt-1 text-xl font-semibold">
+                        {formatShortDate(selectedCalendarDay.dateKey + "T12:00:00")}
+                      </h3>
+                      {selectedCalendarDay.workouts.length > 0 && (
+                        <p className="mt-1 text-sm text-gray-400">
+                          This day has a saved workout, so its completed status
+                          comes from workout history.
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCalendarDateKey("")}
+                      className="w-fit rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-4">
+                    <div>
+                      <label
+                        htmlFor="calendar-status"
+                        className="mb-1 block text-sm text-gray-300"
+                      >
+                        Status
+                      </label>
+                      <select
+                        id="calendar-status"
+                        className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                        value={
+                          selectedCalendarDay.workouts.length > 0
+                            ? "completed"
+                            : selectedCalendarOverride?.status ??
+                              (selectedCalendarDay.status === "future"
+                                ? "planned"
+                                : selectedCalendarDay.status)
+                        }
+                        disabled={selectedCalendarDay.workouts.length > 0}
+                        onChange={(event) =>
+                          updateCalendarOverride(
+                            selectedCalendarDay.dateKey,
+                            "status",
+                            event.target.value as CalendarOverride["status"]
+                          )
+                        }
+                      >
+                        <option value="planned">Planned</option>
+                        <option value="completed">Completed</option>
+                        <option value="skipped">Skipped planned</option>
+                        <option value="recovery">Recovery</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="calendar-workout-type"
+                        className="mb-1 block text-sm text-gray-300"
+                      >
+                        Workout type
+                      </label>
+                      <input
+                        id="calendar-workout-type"
+                        className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                        value={
+                          selectedCalendarOverride?.workoutType ??
+                          selectedCalendarDay.workoutType
+                        }
+                        onChange={(event) =>
+                          updateCalendarOverride(
+                            selectedCalendarDay.dateKey,
+                            "workoutType",
+                            event.target.value
+                          )
+                        }
+                        placeholder="Push, Pull, Rest, Recovery..."
+                      />
+                    </div>
+
+                    <label className="flex items-end gap-3 rounded-md border border-gray-800 bg-gray-950 p-3 text-gray-300">
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedCalendarOverride?.hasPr ??
+                          selectedCalendarDay.hasPr
+                        }
+                        onChange={(event) =>
+                          updateCalendarOverride(
+                            selectedCalendarDay.dateKey,
+                            "hasPr",
+                            event.target.checked
+                          )
+                        }
+                      />
+                      Mark as PR day
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        clearCalendarOverride(selectedCalendarDay.dateKey)
+                      }
+                      className="self-end rounded-md bg-red-600 px-4 py-3 font-semibold hover:bg-red-500"
+                    >
+                      Clear custom edit
+                    </button>
+                  </div>
+
+                  <div className="mt-4">
+                    <label
+                      htmlFor="calendar-note"
+                      className="mb-1 block text-sm text-gray-300"
+                    >
+                      Calendar note
+                    </label>
+                    <textarea
+                      id="calendar-note"
+                      className="min-h-24 w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={
+                        selectedCalendarOverride?.note ?? selectedCalendarDay.note
+                      }
+                      onChange={(event) =>
+                        updateCalendarOverride(
+                          selectedCalendarDay.dateKey,
+                          "note",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Why was this skipped? What did you plan? Any recovery note?"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </CollapsibleSection>
         </div>
