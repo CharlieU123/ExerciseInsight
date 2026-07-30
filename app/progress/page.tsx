@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { SorenessHeatmap } from "../components/SorenessHeatmap";
 import {
@@ -80,12 +80,379 @@ type AdvancedProgress = {
   }[];
 };
 
+type ProgressTab = "Strength" | "Volume" | "Reps" | "Bodyweight";
+type DateRangeFilter = "30" | "90" | "all";
+type TrendMode = "raw" | "smooth";
+
+type BodyweightLog = {
+  id: number;
+  date: string;
+  weight: string;
+};
+
+type ChartPoint = {
+  label: string;
+  value: number;
+  secondaryValue?: number;
+};
+
+type ExerciseMetricSummary = {
+  estimatedOneRepMax: number;
+  bestWeight: number;
+  bestReps: number;
+  totalVolume: number;
+  weeklyHardSets: number;
+  exerciseFrequency: number;
+};
+
+const progressTabs: ProgressTab[] = ["Strength", "Volume", "Reps", "Bodyweight"];
+const bodyweightLogsKey = "exerciseinsight-bodyweight-logs";
+
 function calculateEstimatedOneRepMax(weight: number, reps: number) {
   if (!weight || !reps) {
     return 0;
   }
 
   return Math.round(weight * (1 + reps / 30));
+}
+
+function formatShortDate(dateValue: string) {
+  return new Date(dateValue).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function filterWorkoutsByDateRange(workouts: Workout[], dateRange: DateRangeFilter) {
+  if (dateRange === "all") {
+    return workouts;
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - Number(dateRange));
+  cutoff.setHours(0, 0, 0, 0);
+
+  return workouts.filter((workout) => getWorkoutTime(workout) >= cutoff.getTime());
+}
+
+function smoothChartPoints(points: ChartPoint[]) {
+  return points.map((point, index) => {
+    const previousPoint = points[index - 1];
+    const nextPoint = points[index + 1];
+    const nearbyValues = [previousPoint?.value, point.value, nextPoint?.value].filter(
+      (value): value is number => typeof value === "number"
+    );
+
+    return {
+      ...point,
+      value:
+        Math.round(
+          (nearbyValues.reduce((total, value) => total + value, 0) /
+            nearbyValues.length) *
+            10
+        ) / 10,
+    };
+  });
+}
+
+function getDisplayPoints(points: ChartPoint[], trendMode: TrendMode) {
+  return trendMode === "smooth" ? smoothChartPoints(points) : points;
+}
+
+function calculateSetVolume(weight: string, reps: string) {
+  const parsedWeight = Number(weight);
+  const parsedReps = Number(reps);
+
+  if (Number.isNaN(parsedWeight) || Number.isNaN(parsedReps)) {
+    return 0;
+  }
+
+  return parsedWeight * parsedReps;
+}
+
+function getSelectedExerciseEntries(workouts: Workout[], selectedExercise: string) {
+  const normalizedExerciseName = selectedExercise.toLowerCase();
+
+  return workouts
+    .slice()
+    .reverse()
+    .flatMap((workout) =>
+      workout.exercises
+        .filter(
+          (exerciseEntry) =>
+            exerciseEntry.exercise.trim().toLowerCase() === normalizedExerciseName
+        )
+        .map((exerciseEntry) => ({
+          workout,
+          exerciseEntry,
+        }))
+    );
+}
+
+function buildStrengthChartPoints(
+  workouts: Workout[],
+  selectedExercise: string
+): ChartPoint[] {
+  return getSelectedExerciseEntries(workouts, selectedExercise).map(
+    ({ workout, exerciseEntry }) => {
+      const bestSet = getExerciseSetEntries(exerciseEntry).reduce(
+        (currentBest, setEntry) => {
+          const currentEstimate = calculateEstimatedOneRepMax(
+            Number(currentBest.weight),
+            Number(currentBest.reps)
+          );
+          const nextEstimate = calculateEstimatedOneRepMax(
+            Number(setEntry.weight),
+            Number(setEntry.reps)
+          );
+
+          return nextEstimate > currentEstimate ? setEntry : currentBest;
+        },
+        getExerciseSetEntries(exerciseEntry)[0]
+      );
+
+      return {
+        label: formatShortDate(workout.dateISO),
+        value: calculateEstimatedOneRepMax(
+          Number(bestSet?.weight ?? 0),
+          Number(bestSet?.reps ?? 0)
+        ),
+        secondaryValue: Number(bestSet?.weight ?? 0),
+      };
+    }
+  );
+}
+
+function buildRepsChartPoints(
+  workouts: Workout[],
+  selectedExercise: string
+): ChartPoint[] {
+  return getSelectedExerciseEntries(workouts, selectedExercise).map(
+    ({ workout, exerciseEntry }) => ({
+      label: formatShortDate(workout.dateISO),
+      value: Math.max(
+        ...getExerciseSetEntries(exerciseEntry).map((setEntry) =>
+          Number(setEntry.reps)
+        ),
+        0
+      ),
+      secondaryValue: getExerciseSetCount(exerciseEntry),
+    })
+  );
+}
+
+function buildVolumeChartPoints(workouts: Workout[]): ChartPoint[] {
+  return workouts
+    .slice()
+    .reverse()
+    .map((workout) => {
+      const workoutVolume = workout.exercises.reduce(
+        (workoutTotal, exerciseEntry) =>
+          workoutTotal +
+          getExerciseSetEntries(exerciseEntry).reduce(
+            (exerciseTotal, setEntry) =>
+              exerciseTotal + calculateSetVolume(setEntry.weight, setEntry.reps),
+            0
+          ),
+        0
+      );
+      const hardSets = workout.exercises.reduce(
+        (workoutTotal, exerciseEntry) =>
+          workoutTotal +
+          getExerciseSetEntries(exerciseEntry).filter(
+            (setEntry) => Number(setEntry.rir) <= 2
+          ).length,
+        0
+      );
+
+      return {
+        label: formatShortDate(workout.dateISO),
+        value: workoutVolume,
+        secondaryValue: hardSets,
+      };
+    });
+}
+
+function buildBodyweightChartPoints(bodyweightLogs: BodyweightLog[]): ChartPoint[] {
+  return bodyweightLogs
+    .slice()
+    .sort((firstLog, secondLog) => firstLog.date.localeCompare(secondLog.date))
+    .map((log) => ({
+      label: formatShortDate(log.date + "T12:00:00"),
+      value: Number(log.weight),
+    }))
+    .filter((point) => !Number.isNaN(point.value));
+}
+
+function calculateExerciseMetricSummary(
+  workouts: Workout[],
+  selectedExercise: string
+): ExerciseMetricSummary {
+  const selectedEntries = getSelectedExerciseEntries(workouts, selectedExercise);
+  let estimatedOneRepMax = 0;
+  let bestWeight = 0;
+  let bestReps = 0;
+  let totalVolume = 0;
+  let weeklyHardSets = 0;
+
+  selectedEntries.forEach(({ workout, exerciseEntry }) => {
+    getExerciseSetEntries(exerciseEntry).forEach((setEntry) => {
+      const weight = Number(setEntry.weight);
+      const reps = Number(setEntry.reps);
+      const estimatedMax = calculateEstimatedOneRepMax(weight, reps);
+
+      estimatedOneRepMax = Math.max(estimatedOneRepMax, estimatedMax);
+      bestWeight = Math.max(bestWeight, Number.isNaN(weight) ? 0 : weight);
+      bestReps = Math.max(bestReps, Number.isNaN(reps) ? 0 : reps);
+      totalVolume += calculateSetVolume(setEntry.weight, setEntry.reps);
+
+      if (isWorkoutThisWeek(workout) && Number(setEntry.rir) <= 2) {
+        weeklyHardSets += 1;
+      }
+    });
+  });
+
+  return {
+    estimatedOneRepMax,
+    bestWeight,
+    bestReps,
+    totalVolume,
+    weeklyHardSets,
+    exerciseFrequency: selectedEntries.length,
+  };
+}
+
+function calculateTotalVolume(workouts: Workout[]) {
+  return buildVolumeChartPoints(workouts).reduce(
+    (total, point) => total + point.value,
+    0
+  );
+}
+
+function calculateWeeklyHardSets(workouts: Workout[]) {
+  return workouts
+    .filter(isWorkoutThisWeek)
+    .reduce(
+      (workoutTotal, workout) =>
+        workoutTotal +
+        workout.exercises.reduce(
+          (exerciseTotal, exerciseEntry) =>
+            exerciseTotal +
+            getExerciseSetEntries(exerciseEntry).filter(
+              (setEntry) => Number(setEntry.rir) <= 2
+            ).length,
+          0
+        ),
+      0
+    );
+}
+
+function SimpleLineChart({
+  points,
+  unit,
+}: {
+  points: ChartPoint[];
+  unit: string;
+}) {
+  if (points.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-gray-800 bg-gray-950 p-6 text-center text-sm text-gray-400">
+        No chart data yet.
+      </div>
+    );
+  }
+
+  const chartWidth = 640;
+  const chartHeight = 240;
+  const padding = 28;
+  const maxValue = Math.max(...points.map((point) => point.value), 1);
+  const minValue = Math.min(...points.map((point) => point.value), 0);
+  const valueRange = Math.max(maxValue - minValue, 1);
+  const coordinates = points.map((point, index) => {
+    const x =
+      points.length === 1
+        ? chartWidth / 2
+        : padding +
+          (index / (points.length - 1)) * (chartWidth - padding * 2);
+    const y =
+      chartHeight -
+      padding -
+      ((point.value - minValue) / valueRange) * (chartHeight - padding * 2);
+
+    return { x, y, point };
+  });
+  const pathData = coordinates
+    .map((coordinate, index) =>
+      `${index === 0 ? "M" : "L"} ${coordinate.x} ${coordinate.y}`
+    )
+    .join(" ");
+
+  return (
+    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+      <svg
+        className="h-64 w-full overflow-visible"
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+        role="img"
+        aria-label={`Progress chart in ${unit}`}
+      >
+        <line
+          x1={padding}
+          x2={chartWidth - padding}
+          y1={chartHeight - padding}
+          y2={chartHeight - padding}
+          className="stroke-gray-800"
+          strokeWidth="2"
+        />
+        <line
+          x1={padding}
+          x2={padding}
+          y1={padding}
+          y2={chartHeight - padding}
+          className="stroke-gray-800"
+          strokeWidth="2"
+        />
+        <path
+          d={pathData}
+          className="fill-none stroke-blue-500"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="4"
+        />
+        {coordinates.map(({ x, y, point }) => (
+          <g key={point.label + point.value + x}>
+            <circle cx={x} cy={y} r="5" className="fill-blue-400" />
+            <text
+              x={x}
+              y={Math.max(y - 12, 14)}
+              textAnchor="middle"
+              className="fill-gray-300 text-[12px] font-semibold"
+            >
+              {point.value.toLocaleString()} {unit}
+            </text>
+          </g>
+        ))}
+      </svg>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        {points.slice(-4).map((point) => (
+          <div
+            key={point.label + point.value}
+            className="rounded-md border border-gray-800 bg-gray-900/70 p-3"
+          >
+            <p className="text-xs text-gray-400">{point.label}</p>
+            <p className="font-semibold">
+              {point.value.toLocaleString()} {unit}
+            </p>
+            {typeof point.secondaryValue === "number" && (
+              <p className="text-xs text-gray-500">
+                Secondary: {point.secondaryValue.toLocaleString()}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function buildLastSevenDays(workouts: Workout[]) {
@@ -506,6 +873,15 @@ function getDeloadToneClasses(tone: string) {
 export default function ProgressPage() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [selectedTrendExercise, setSelectedTrendExercise] = useState("");
+  const [selectedProgressTab, setSelectedProgressTab] =
+    useState<ProgressTab>("Strength");
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("90");
+  const [trendMode, setTrendMode] = useState<TrendMode>("raw");
+  const [bodyweightLogs, setBodyweightLogs] = useState<BodyweightLog[]>([]);
+  const [bodyweightDate, setBodyweightDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [bodyweightValue, setBodyweightValue] = useState("");
 
   useEffect(() => {
     async function loadProgressWorkouts() {
@@ -525,6 +901,51 @@ export default function ProgressPage() {
     loadProgressWorkouts();
   }, []);
 
+  useEffect(() => {
+    const savedLogs = localStorage.getItem(bodyweightLogsKey);
+
+    if (!savedLogs) {
+      return;
+    }
+
+    try {
+      const parsedLogs = JSON.parse(savedLogs) as BodyweightLog[];
+      setBodyweightLogs(Array.isArray(parsedLogs) ? parsedLogs : []);
+    } catch {
+      localStorage.removeItem(bodyweightLogsKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(bodyweightLogsKey, JSON.stringify(bodyweightLogs));
+  }, [bodyweightLogs]);
+
+  function addBodyweightLog(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!bodyweightDate || !bodyweightValue) {
+      return;
+    }
+
+    setBodyweightLogs((currentLogs) =>
+      [
+        ...currentLogs.filter((log) => log.date !== bodyweightDate),
+        {
+          id: Date.now(),
+          date: bodyweightDate,
+          weight: bodyweightValue,
+        },
+      ].sort((firstLog, secondLog) => secondLog.date.localeCompare(firstLog.date))
+    );
+    setBodyweightValue("");
+  }
+
+  function deleteBodyweightLog(id: number) {
+    setBodyweightLogs((currentLogs) =>
+      currentLogs.filter((log) => log.id !== id)
+    );
+  }
+
   const workoutsThisWeek = workouts.filter(isWorkoutThisWeek).length;
   const totalExercises = workouts.reduce(
     (total, workout) => total + workout.exercises.length,
@@ -543,6 +964,32 @@ export default function ProgressPage() {
   const deloadRecommendation = getDeloadRecommendation(workouts);
   const exerciseNames = getUniqueExerciseNames(workouts);
   const activeTrendExercise = selectedTrendExercise || exerciseNames[0] || "";
+  const filteredWorkouts = useMemo(
+    () => filterWorkoutsByDateRange(workouts, dateRangeFilter),
+    [dateRangeFilter, workouts]
+  );
+  const exerciseMetricSummary = calculateExerciseMetricSummary(
+    filteredWorkouts,
+    activeTrendExercise
+  );
+  const strengthChartPoints = getDisplayPoints(
+    buildStrengthChartPoints(filteredWorkouts, activeTrendExercise),
+    trendMode
+  );
+  const repsChartPoints = getDisplayPoints(
+    buildRepsChartPoints(filteredWorkouts, activeTrendExercise),
+    trendMode
+  );
+  const volumeChartPoints = getDisplayPoints(
+    buildVolumeChartPoints(filteredWorkouts),
+    trendMode
+  );
+  const bodyweightChartPoints = getDisplayPoints(
+    buildBodyweightChartPoints(bodyweightLogs),
+    trendMode
+  );
+  const filteredTotalVolume = calculateTotalVolume(filteredWorkouts);
+  const filteredWeeklyHardSets = calculateWeeklyHardSets(filteredWorkouts);
   const exerciseTrend = buildExerciseTrend(workouts, activeTrendExercise);
   const monthlyRecap = calculateMonthlyRecap(workouts);
   const advancedProgress = calculateAdvancedProgress(workouts);
@@ -586,6 +1033,286 @@ export default function ProgressPage() {
               {topMuscleGroup ? topMuscleGroup.muscleGroup : "None"}
             </p>
           </div>
+        </div>
+
+        <div className="mb-8">
+          <CollapsibleSection
+            title="Progress Analytics"
+            description="Separate views for strength, volume, reps, and bodyweight trends."
+          >
+            <div className="space-y-5">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div className="grid gap-2 sm:grid-cols-4">
+                  {progressTabs.map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setSelectedProgressTab(tab)}
+                      className={
+                        "rounded-md px-4 py-3 text-sm font-semibold " +
+                        (selectedProgressTab === tab
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-800 text-gray-300 hover:bg-gray-700")
+                      }
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {selectedProgressTab !== "Bodyweight" && (
+                    <div>
+                      <label
+                        htmlFor="analytics-exercise"
+                        className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400"
+                      >
+                        Exercise
+                      </label>
+                      <select
+                        id="analytics-exercise"
+                        className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                        value={activeTrendExercise}
+                        onChange={(event) =>
+                          setSelectedTrendExercise(event.target.value)
+                        }
+                      >
+                        {exerciseNames.length === 0 ? (
+                          <option value="">No exercises yet</option>
+                        ) : (
+                          exerciseNames.map((exerciseName) => (
+                            <option key={exerciseName} value={exerciseName}>
+                              {exerciseName}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  )}
+
+                  <div>
+                    <label
+                      htmlFor="analytics-date-range"
+                      className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400"
+                    >
+                      Date Range
+                    </label>
+                    <select
+                      id="analytics-date-range"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={dateRangeFilter}
+                      onChange={(event) =>
+                        setDateRangeFilter(event.target.value as DateRangeFilter)
+                      }
+                    >
+                      <option value="30">Last 30 days</option>
+                      <option value="90">Last 90 days</option>
+                      <option value="all">All time</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="analytics-trend-mode"
+                      className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-400"
+                    >
+                      Trend
+                    </label>
+                    <select
+                      id="analytics-trend-mode"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={trendMode}
+                      onChange={(event) =>
+                        setTrendMode(event.target.value as TrendMode)
+                      }
+                    >
+                      <option value="raw">Raw data</option>
+                      <option value="smooth">Smoothed trend</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {selectedProgressTab === "Strength" && (
+                <div className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Estimated 1RM</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.estimatedOneRepMax} lbs
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Best Weight</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.bestWeight} lbs
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Frequency</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.exerciseFrequency}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Hard Sets This Week</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.weeklyHardSets}
+                      </p>
+                    </div>
+                  </div>
+                  <SimpleLineChart points={strengthChartPoints} unit="lb" />
+                </div>
+              )}
+
+              {selectedProgressTab === "Volume" && (
+                <div className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Total Volume</p>
+                      <p className="text-3xl font-bold">
+                        {filteredTotalVolume.toLocaleString()} lbs
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Weekly Hard Sets</p>
+                      <p className="text-3xl font-bold">{filteredWeeklyHardSets}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Workouts In Range</p>
+                      <p className="text-3xl font-bold">{filteredWorkouts.length}</p>
+                    </div>
+                  </div>
+                  <SimpleLineChart points={volumeChartPoints} unit="lbs" />
+                  <p className="text-sm text-gray-500">
+                    Secondary values below the chart are hard sets, counted as RIR 0-2.
+                  </p>
+                </div>
+              )}
+
+              {selectedProgressTab === "Reps" && (
+                <div className="space-y-5">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Best Rep Performance</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.bestReps} reps
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Total Volume</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.totalVolume.toLocaleString()} lbs
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Exercise Frequency</p>
+                      <p className="text-3xl font-bold">
+                        {exerciseMetricSummary.exerciseFrequency}
+                      </p>
+                    </div>
+                  </div>
+                  <SimpleLineChart points={repsChartPoints} unit="reps" />
+                  <p className="text-sm text-gray-500">
+                    Secondary values below the chart are sets completed in that session.
+                  </p>
+                </div>
+              )}
+
+              {selectedProgressTab === "Bodyweight" && (
+                <div className="grid gap-5 lg:grid-cols-[0.75fr_1.25fr]">
+                  <div className="space-y-4">
+                    <form
+                      onSubmit={addBodyweightLog}
+                      className="rounded-lg border border-gray-800 bg-gray-950 p-4"
+                    >
+                      <h3 className="text-lg font-semibold">Log Bodyweight</h3>
+                      <div className="mt-4 space-y-3">
+                        <div>
+                          <label
+                            htmlFor="bodyweight-date"
+                            className="mb-1 block text-sm text-gray-300"
+                          >
+                            Date
+                          </label>
+                          <input
+                            id="bodyweight-date"
+                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                            type="date"
+                            value={bodyweightDate}
+                            onChange={(event) =>
+                              setBodyweightDate(event.target.value)
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label
+                            htmlFor="bodyweight-value"
+                            className="mb-1 block text-sm text-gray-300"
+                          >
+                            Bodyweight
+                          </label>
+                          <input
+                            id="bodyweight-value"
+                            className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={bodyweightValue}
+                            onChange={(event) =>
+                              setBodyweightValue(event.target.value)
+                            }
+                            placeholder="185.4"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full rounded-md bg-blue-600 p-3 font-semibold hover:bg-blue-500"
+                        >
+                          Save Bodyweight
+                        </button>
+                      </div>
+                    </form>
+
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-4">
+                      <p className="text-sm text-gray-400">Latest Bodyweight</p>
+                      <p className="text-3xl font-bold">
+                        {bodyweightLogs[0]?.weight
+                          ? `${bodyweightLogs[0].weight} lbs`
+                          : "No data"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <SimpleLineChart points={bodyweightChartPoints} unit="lbs" />
+                    {bodyweightLogs.length > 0 && (
+                      <div className="space-y-2">
+                        {bodyweightLogs.slice(0, 5).map((log) => (
+                          <div
+                            key={log.id}
+                            className="flex items-center justify-between gap-3 rounded-md border border-gray-800 bg-gray-950 p-3"
+                          >
+                            <div>
+                              <p className="font-semibold">{log.weight} lbs</p>
+                              <p className="text-sm text-gray-400">{log.date}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => deleteBodyweightLog(log.id)}
+                              className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
         </div>
 
         <div className="mb-8">
