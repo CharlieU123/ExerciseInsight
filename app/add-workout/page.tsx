@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { EmptyState } from "../components/EmptyState";
 import { ExerciseDemo } from "../components/ExerciseDemo";
-import { RestTimer } from "../components/RestTimer";
 import { SpeechToTextButton } from "../components/SpeechToTextButton";
 import {
   exerciseLibrary,
@@ -77,6 +76,18 @@ const workoutTemplates = {
 };
 
 type TemplateName = keyof typeof workoutTemplates;
+
+const activeWorkoutDraftKey = "exerciseinsight-active-workout-draft";
+const defaultRestSeconds = 90;
+
+type ActiveWorkoutDraft = {
+  workoutDate: string;
+  feeling: string;
+  notes: string;
+  currentExercises: ExerciseEntry[];
+  completedSetIds: Record<string, boolean>;
+  activeStartedAt: number;
+};
 
 function getTodayInputDate() {
   return new Date().toISOString().slice(0, 10);
@@ -192,6 +203,39 @@ function getExerciseHistorySuggestion(history: ReturnType<typeof getExerciseHist
   return "Last session was in a productive range. Try to match it first, then progress if the sets move well.";
 }
 
+function formatElapsedTime(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getSetCompletionId(exerciseId: AppId, setId: AppId) {
+  return `${exerciseId}-${setId}`;
+}
+
+function getPreviousSetLabel(
+  workouts: Workout[],
+  exerciseName: string,
+  setNumber: number
+) {
+  const previousPerformance = getPreviousExercisePerformance(workouts, exerciseName);
+  const previousSet = previousPerformance?.exercise.setEntries.find(
+    (setEntry) => setEntry.setNumber === setNumber
+  );
+
+  if (!previousSet) {
+    return "No data";
+  }
+
+  return `${previousSet.weight} x ${previousSet.reps}`;
+}
+
 export default function AddWorkoutPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedLibraryExercise, setSelectedLibraryExercise] = useState("");
@@ -220,6 +264,13 @@ export default function AddWorkoutPage() {
   const [saveMessage, setSaveMessage] = useState("");
   const [hasLoadedSavedData, setHasLoadedSavedData] = useState(false);
   const [loadedProgramId, setLoadedProgramId] = useState("");
+  const [completedSetIds, setCompletedSetIds] = useState<Record<string, boolean>>({});
+  const [activeStartedAt, setActiveStartedAt] = useState(() => Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [restSeconds, setRestSeconds] = useState(defaultRestSeconds);
+  const [restRemainingSeconds, setRestRemainingSeconds] =
+    useState(defaultRestSeconds);
+  const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
 
   useEffect(() => {
     async function loadSavedWorkouts() {
@@ -254,12 +305,97 @@ export default function AddWorkoutPage() {
   }, []);
 
   useEffect(() => {
+    const savedDraft = localStorage.getItem(activeWorkoutDraftKey);
+
+    if (!savedDraft) {
+      return;
+    }
+
+    try {
+      const parsedDraft = JSON.parse(savedDraft) as Partial<ActiveWorkoutDraft>;
+
+      if (Array.isArray(parsedDraft.currentExercises)) {
+        setCurrentExercises(parsedDraft.currentExercises);
+      }
+
+      if (typeof parsedDraft.workoutDate === "string") {
+        setWorkoutDate(parsedDraft.workoutDate);
+      }
+
+      if (typeof parsedDraft.feeling === "string") {
+        setFeeling(parsedDraft.feeling);
+      }
+
+      if (typeof parsedDraft.notes === "string") {
+        setNotes(parsedDraft.notes);
+      }
+
+      if (parsedDraft.completedSetIds && typeof parsedDraft.completedSetIds === "object") {
+        setCompletedSetIds(parsedDraft.completedSetIds);
+      }
+
+      if (typeof parsedDraft.activeStartedAt === "number") {
+        setActiveStartedAt(parsedDraft.activeStartedAt);
+      }
+    } catch {
+      localStorage.removeItem(activeWorkoutDraftKey);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!hasLoadedSavedData || userId) {
       return;
     }
 
     saveWorkouts(workouts);
   }, [hasLoadedSavedData, userId, workouts]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - activeStartedAt) / 1000)));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [activeStartedAt]);
+
+  useEffect(() => {
+    if (!isRestTimerRunning) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setRestRemainingSeconds((currentSeconds) => {
+        if (currentSeconds <= 1) {
+          setIsRestTimerRunning(false);
+          return 0;
+        }
+
+        return currentSeconds - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isRestTimerRunning]);
+
+  useEffect(() => {
+    const draft: ActiveWorkoutDraft = {
+      workoutDate,
+      feeling,
+      notes,
+      currentExercises,
+      completedSetIds,
+      activeStartedAt,
+    };
+
+    localStorage.setItem(activeWorkoutDraftKey, JSON.stringify(draft));
+  }, [
+    activeStartedAt,
+    completedSetIds,
+    currentExercises,
+    feeling,
+    notes,
+    workoutDate,
+  ]);
 
   useEffect(() => {
     const exerciseFromLibrary = new URLSearchParams(window.location.search).get(
@@ -505,6 +641,148 @@ export default function AddWorkoutPage() {
     setDidPartials(updatedSetEntries.some((setEntry) => setEntry.didPartials));
   }
 
+  function updateActiveSet(
+    exerciseId: AppId,
+    setId: AppId,
+    field: keyof Pick<SetEntry, "weight" | "reps" | "rir" | "didPartials">,
+    value: string | boolean
+  ) {
+    setCurrentExercises((currentWorkoutExercises) =>
+      currentWorkoutExercises.map((exerciseEntry) => {
+        if (exerciseEntry.id !== exerciseId) {
+          return exerciseEntry;
+        }
+
+        const updatedSetEntries = exerciseEntry.setEntries.map((setEntry) =>
+          setEntry.id === setId
+            ? {
+                ...setEntry,
+                [field]: value,
+              }
+            : setEntry
+        );
+
+        return {
+          ...exerciseEntry,
+          setEntries: updatedSetEntries,
+          sets: String(updatedSetEntries.length),
+          weight: updatedSetEntries[0]?.weight ?? exerciseEntry.weight,
+          reps: updatedSetEntries[0]?.reps ?? exerciseEntry.reps,
+          rir: updatedSetEntries[0]?.rir ?? exerciseEntry.rir,
+          didPartials: updatedSetEntries.some((setEntry) => setEntry.didPartials),
+        };
+      })
+    );
+  }
+
+  function updateActiveExerciseNotes(exerciseId: AppId, value: string) {
+    setCurrentExercises((currentWorkoutExercises) =>
+      currentWorkoutExercises.map((exerciseEntry) =>
+        exerciseEntry.id === exerciseId
+          ? {
+              ...exerciseEntry,
+              notes: value,
+            }
+          : exerciseEntry
+      )
+    );
+  }
+
+  function addActiveSet(exerciseId: AppId) {
+    setCurrentExercises((currentWorkoutExercises) =>
+      currentWorkoutExercises.map((exerciseEntry) => {
+        if (exerciseEntry.id !== exerciseId) {
+          return exerciseEntry;
+        }
+
+        const lastSet = exerciseEntry.setEntries[exerciseEntry.setEntries.length - 1];
+        const updatedSetEntries = [
+          ...exerciseEntry.setEntries,
+          {
+            id: Date.now(),
+            setNumber: exerciseEntry.setEntries.length + 1,
+            weight: lastSet?.weight ?? exerciseEntry.weight,
+            reps: lastSet?.reps ?? exerciseEntry.reps,
+            rir: lastSet?.rir ?? exerciseEntry.rir,
+            didPartials: lastSet?.didPartials ?? exerciseEntry.didPartials,
+          },
+        ];
+
+        return {
+          ...exerciseEntry,
+          setEntries: updatedSetEntries,
+          sets: String(updatedSetEntries.length),
+        };
+      })
+    );
+  }
+
+  function dropActiveSet(exerciseId: AppId, setId: AppId) {
+    setCurrentExercises((currentWorkoutExercises) =>
+      currentWorkoutExercises.map((exerciseEntry) => {
+        if (exerciseEntry.id !== exerciseId || exerciseEntry.setEntries.length <= 1) {
+          return exerciseEntry;
+        }
+
+        const updatedSetEntries = exerciseEntry.setEntries
+          .filter((setEntry) => setEntry.id !== setId)
+          .map((setEntry, index) => ({
+            ...setEntry,
+            setNumber: index + 1,
+          }));
+
+        return {
+          ...exerciseEntry,
+          setEntries: updatedSetEntries,
+          sets: String(updatedSetEntries.length),
+          weight: updatedSetEntries[0]?.weight ?? exerciseEntry.weight,
+          reps: updatedSetEntries[0]?.reps ?? exerciseEntry.reps,
+          rir: updatedSetEntries[0]?.rir ?? exerciseEntry.rir,
+          didPartials: updatedSetEntries.some((setEntry) => setEntry.didPartials),
+        };
+      })
+    );
+    setCompletedSetIds((currentCompletedIds) => {
+      const nextCompletedIds = { ...currentCompletedIds };
+      delete nextCompletedIds[getSetCompletionId(exerciseId, setId)];
+      return nextCompletedIds;
+    });
+  }
+
+  function startRestTimer() {
+    setRestRemainingSeconds(restSeconds);
+    setIsRestTimerRunning(true);
+  }
+
+  function toggleActiveSetDone(exerciseId: AppId, setId: AppId) {
+    const completionId = getSetCompletionId(exerciseId, setId);
+    const isCurrentlyDone = completedSetIds[completionId];
+
+    setCompletedSetIds((currentCompletedIds) => ({
+      ...currentCompletedIds,
+      [completionId]: !isCurrentlyDone,
+    }));
+
+    if (!isCurrentlyDone) {
+      startRestTimer();
+    }
+  }
+
+  function resetActiveWorkoutDraft() {
+    const confirmed = window.confirm("Reset the active workout timer and completed sets?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setCompletedSetIds({});
+    setActiveStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setRestRemainingSeconds(restSeconds);
+    setIsRestTimerRunning(false);
+    localStorage.removeItem(activeWorkoutDraftKey);
+  }
+
   function selectExerciseFromLibrary(exerciseName: string) {
     setSelectedLibraryExercise(exerciseName);
 
@@ -621,6 +899,13 @@ export default function AddWorkoutPage() {
     setCurrentExercises(
       currentExercises.filter((exerciseEntry) => exerciseEntry.id !== id)
     );
+    setCompletedSetIds((currentCompletedIds) =>
+      Object.fromEntries(
+        Object.entries(currentCompletedIds).filter(
+          ([completionId]) => !completionId.startsWith(`${id}-`)
+        )
+      )
+    );
 
     if (editingCurrentExerciseId === id) {
       resetExerciseForm();
@@ -668,6 +953,8 @@ export default function AddWorkoutPage() {
     );
 
     setCurrentExercises(templateExercises);
+    setCompletedSetIds({});
+    setActiveStartedAt(Date.now());
   }
 
   function clearCurrentWorkout() {
@@ -681,6 +968,11 @@ export default function AddWorkoutPage() {
 
     setCurrentExercises([]);
     setSelectedTemplate("");
+    setCompletedSetIds({});
+    setActiveStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setIsRestTimerRunning(false);
+    localStorage.removeItem(activeWorkoutDraftKey);
     resetExerciseForm();
   }
 
@@ -715,9 +1007,15 @@ export default function AddWorkoutPage() {
     }
 
     setCurrentExercises([]);
+    setCompletedSetIds({});
+    setActiveStartedAt(Date.now());
+    setElapsedSeconds(0);
+    setRestRemainingSeconds(restSeconds);
+    setIsRestTimerRunning(false);
     setWorkoutDate(getTodayInputDate());
     setFeeling("");
     setNotes("");
+    localStorage.removeItem(activeWorkoutDraftKey);
   }
 
   function addVoiceNote(transcript: string) {
@@ -739,6 +1037,19 @@ export default function AddWorkoutPage() {
     exercise
   );
   const exerciseHistory = getExerciseHistory(workouts, exercise);
+  const totalActiveSets = currentExercises.reduce(
+    (totalSets, exerciseEntry) => totalSets + exerciseEntry.setEntries.length,
+    0
+  );
+  const completedActiveSets = currentExercises.reduce(
+    (totalSets, exerciseEntry) =>
+      totalSets +
+      exerciseEntry.setEntries.filter(
+        (setEntry) =>
+          completedSetIds[getSetCompletionId(exerciseEntry.id, setEntry.id)]
+      ).length,
+    0
+  );
 
   return (
     <main className="min-h-screen p-4 sm:p-6">
@@ -1266,20 +1577,96 @@ export default function AddWorkoutPage() {
             </CollapsibleSection>
           </div>
 
-          <CollapsibleSection title="Current Workout">
-            <div className="mb-4">
-              <RestTimer />
+          <CollapsibleSection
+            title="Active Workout"
+            description="Use this screen during the workout. Changes autosave on this device."
+          >
+            <div className="mb-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-blue-500/20 bg-blue-950/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-200">
+                  Elapsed
+                </p>
+                <p className="mt-1 text-3xl font-bold">
+                  {formatElapsedTime(elapsedSeconds)}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-green-500/20 bg-green-950/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-200">
+                  Completed Sets
+                </p>
+                <p className="mt-1 text-3xl font-bold">
+                  {completedActiveSets}/{totalActiveSets}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-pink-500/20 bg-pink-950/20 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-pink-200">
+                      Rest Timer
+                    </p>
+                    <p className="mt-1 text-3xl font-bold">
+                      {formatElapsedTime(restRemainingSeconds)}
+                    </p>
+                  </div>
+                  <select
+                    aria-label="Rest timer length"
+                    className="rounded-md border border-gray-700 bg-gray-950 p-2 text-sm"
+                    value={restSeconds}
+                    onChange={(event) => {
+                      const nextRestSeconds = Number(event.target.value);
+                      setRestSeconds(nextRestSeconds);
+                      setRestRemainingSeconds(nextRestSeconds);
+                      setIsRestTimerRunning(false);
+                    }}
+                  >
+                    <option value={60}>60s</option>
+                    <option value={90}>90s</option>
+                    <option value={120}>120s</option>
+                    <option value={180}>180s</option>
+                  </select>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRestTimerRunning(!isRestTimerRunning)}
+                    className="rounded-md bg-pink-600 px-3 py-2 text-sm font-semibold hover:bg-pink-500"
+                  >
+                    {isRestTimerRunning ? "Pause" : "Start"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRestRemainingSeconds(restSeconds);
+                      setIsRestTimerRunning(false);
+                    }}
+                    className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               {currentExercises.length > 0 && (
-                <button
-                  type="button"
-                  onClick={clearCurrentWorkout}
-                  className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
-                >
-                  Clear Workout
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={resetActiveWorkoutDraft}
+                    className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                  >
+                    Reset Active Mode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearCurrentWorkout}
+                    className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
+                  >
+                    Clear Workout
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1289,63 +1676,209 @@ export default function AddWorkoutPage() {
                 description="Add an exercise manually, choose one from the library, or load a workout template."
               />
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-5">
                 {currentExercises.map((exerciseEntry) => (
                   <div
                     key={exerciseEntry.id}
-                    className="flex flex-col gap-4 rounded-lg border border-gray-800 bg-gray-950 p-4 sm:flex-row sm:items-start sm:justify-between"
+                    className="rounded-xl border border-gray-800 bg-gray-950 p-4"
                   >
-                    <div className="min-w-0">
-                      <h3 className="font-semibold">{exerciseEntry.exercise}</h3>
-                      <p className="text-sm font-semibold text-blue-300">
-                        {exerciseEntry.muscleGroup}
-                      </p>
-                      <p className="text-sm text-gray-300">
-                        {summarizeExerciseSets(exerciseEntry)}
-                      </p>
-                      {getPreviousExercisePerformance(
-                        workouts,
-                        exerciseEntry.exercise
-                      ) && (
-                        <p className="mt-2 rounded-md border border-blue-500/20 bg-blue-950/20 p-2 text-sm text-blue-100">
-                          Previous:{" "}
-                          {summarizeExerciseSets(
-                            getPreviousExercisePerformance(
-                              workouts,
-                              exerciseEntry.exercise
-                            )!.exercise
-                          )}
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-semibold">
+                          {exerciseEntry.exercise}
+                        </h3>
+                        <p className="text-sm font-semibold text-blue-300">
+                          {exerciseEntry.muscleGroup}
                         </p>
-                      )}
-                      <p className="text-sm text-gray-400">
-                        Pump: {exerciseEntry.pump}/3 · Soreness:{" "}
-                        {exerciseEntry.soreness}/3 · Partials:{" "}
-                        {exerciseEntry.didPartials ? "Yes" : "No"}
-                      </p>
-                      {exerciseEntry.notes && (
-                        <p className="mt-2 text-sm text-gray-300">
-                          Notes: {exerciseEntry.notes}
+                        <p className="text-sm text-gray-400">
+                          Pump: {exerciseEntry.pump}/3 · Soreness:{" "}
+                          {exerciseEntry.soreness}/3
                         </p>
-                      )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => addActiveSet(exerciseEntry.id)}
+                          className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                        >
+                          Add Set
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => startEditingCurrentExercise(exerciseEntry)}
+                          className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                        >
+                          Edit Exercise
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteCurrentExercise(exerciseEntry.id)}
+                          className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          startEditingCurrentExercise(exerciseEntry)
+                    <div className="overflow-x-auto">
+                      <div className="min-w-[760px]">
+                        <div className="grid grid-cols-[4rem_7rem_1fr_1fr_1fr_5rem_5rem_5rem] gap-2 border-b border-gray-800 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          <p>Set</p>
+                          <p>Previous</p>
+                          <p>Weight</p>
+                          <p>Reps</p>
+                          <p>RIR</p>
+                          <p>Partials</p>
+                          <p>Done</p>
+                          <p>Drop</p>
+                        </div>
+
+                        <div className="space-y-2 pt-2">
+                          {exerciseEntry.setEntries.map((setEntry) => {
+                            const completionId = getSetCompletionId(
+                              exerciseEntry.id,
+                              setEntry.id
+                            );
+                            const isDone = completedSetIds[completionId] ?? false;
+
+                            return (
+                              <div
+                                key={setEntry.id}
+                                className={
+                                  "grid grid-cols-[4rem_7rem_1fr_1fr_1fr_5rem_5rem_5rem] items-center gap-2 rounded-lg border p-2 " +
+                                  (isDone
+                                    ? "border-green-500/30 bg-green-950/20"
+                                    : "border-gray-800 bg-gray-900/60")
+                                }
+                              >
+                                <p className="font-semibold">
+                                  {setEntry.setNumber}
+                                </p>
+                                <p className="text-sm text-gray-400">
+                                  {getPreviousSetLabel(
+                                    workouts,
+                                    exerciseEntry.exercise,
+                                    setEntry.setNumber
+                                  )}
+                                </p>
+                                <input
+                                  aria-label={`${exerciseEntry.exercise} set ${setEntry.setNumber} weight`}
+                                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-2"
+                                  type="number"
+                                  min="0"
+                                  step="0.5"
+                                  value={setEntry.weight}
+                                  onChange={(event) =>
+                                    updateActiveSet(
+                                      exerciseEntry.id,
+                                      setEntry.id,
+                                      "weight",
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                                <input
+                                  aria-label={`${exerciseEntry.exercise} set ${setEntry.setNumber} reps`}
+                                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-2"
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={setEntry.reps}
+                                  onChange={(event) =>
+                                    updateActiveSet(
+                                      exerciseEntry.id,
+                                      setEntry.id,
+                                      "reps",
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                                <input
+                                  aria-label={`${exerciseEntry.exercise} set ${setEntry.setNumber} RIR`}
+                                  className="w-full rounded-md border border-gray-700 bg-gray-950 p-2"
+                                  type="number"
+                                  min="0"
+                                  max="10"
+                                  step="1"
+                                  value={setEntry.rir}
+                                  onChange={(event) =>
+                                    updateActiveSet(
+                                      exerciseEntry.id,
+                                      setEntry.id,
+                                      "rir",
+                                      event.target.value
+                                    )
+                                  }
+                                />
+                                <label className="flex justify-center">
+                                  <input
+                                    aria-label={`${exerciseEntry.exercise} set ${setEntry.setNumber} partial reps`}
+                                    type="checkbox"
+                                    checked={setEntry.didPartials}
+                                    onChange={(event) =>
+                                      updateActiveSet(
+                                        exerciseEntry.id,
+                                        setEntry.id,
+                                        "didPartials",
+                                        event.target.checked
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    toggleActiveSetDone(
+                                      exerciseEntry.id,
+                                      setEntry.id
+                                    )
+                                  }
+                                  className={
+                                    "rounded-md px-3 py-2 text-sm font-semibold " +
+                                    (isDone
+                                      ? "bg-green-600 hover:bg-green-500"
+                                      : "bg-gray-800 hover:bg-gray-700")
+                                  }
+                                >
+                                  {isDone ? "✓" : "○"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    dropActiveSet(exerciseEntry.id, setEntry.id)
+                                  }
+                                  disabled={exerciseEntry.setEntries.length <= 1}
+                                  className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  -
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <label
+                        htmlFor={`active-notes-${exerciseEntry.id}`}
+                        className="mb-1 block text-sm text-gray-300"
+                      >
+                        Notes for this exercise
+                      </label>
+                      <textarea
+                        id={`active-notes-${exerciseEntry.id}`}
+                        className="min-h-20 w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                        value={exerciseEntry.notes}
+                        onChange={(event) =>
+                          updateActiveExerciseNotes(
+                            exerciseEntry.id,
+                            event.target.value
+                          )
                         }
-                        className="h-fit rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteCurrentExercise(exerciseEntry.id)}
-                        className="h-fit rounded-md bg-red-600 px-3 py-2 text-sm font-semibold hover:bg-red-500"
-                      >
-                        Remove
-                      </button>
+                        placeholder="Cues, equipment setup, pain, tempo, or next-session reminders..."
+                      />
                     </div>
                   </div>
                 ))}
