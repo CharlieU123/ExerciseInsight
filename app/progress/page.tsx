@@ -10,13 +10,17 @@ import {
   getExerciseSetEntries,
   getExerciseSetCount,
   getExerciseTopWeight,
+  getProgramDays,
   isWorkoutThisWeek,
+  loadTrainingPrograms,
   loadWorkouts,
   muscleGroups,
   summarizeExerciseSets,
   type ExerciseEntry,
+  type TrainingProgram,
   type Workout,
 } from "../lib/fitnessData";
+import { loadProgramsFromSupabase } from "../lib/supabasePlanning";
 import {
   getCurrentUserId,
   loadWorkoutsFromSupabase,
@@ -105,8 +109,22 @@ type ExerciseMetricSummary = {
   exerciseFrequency: number;
 };
 
+type WorkoutCalendarDay = {
+  dateKey: string;
+  dayNumber: number;
+  weekday: number;
+  isToday: boolean;
+  isFuture: boolean;
+  isPlanned: boolean;
+  hasPr: boolean;
+  workouts: Workout[];
+  workoutType: string;
+  status: "completed" | "skipped" | "recovery" | "future";
+};
+
 const progressTabs: ProgressTab[] = ["Strength", "Volume", "Reps", "Bodyweight"];
 const bodyweightLogsKey = "exerciseinsight-bodyweight-logs";
+const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function calculateEstimatedOneRepMax(weight: number, reps: number) {
   if (!weight || !reps) {
@@ -121,6 +139,14 @@ function formatShortDate(dateValue: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function getDateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 function filterWorkoutsByDateRange(workouts: Workout[], dateRange: DateRangeFilter) {
@@ -811,6 +837,216 @@ function calculateRecentPrs(workouts: Workout[]) {
   return prs.slice(-6).reverse();
 }
 
+function buildPrDateKeys(workouts: Workout[]) {
+  const bestByExercise = new Map<string, number>();
+  const prDateKeys = new Set<string>();
+
+  workouts
+    .slice()
+    .reverse()
+    .forEach((workout) => {
+      workout.exercises.forEach((exerciseEntry) => {
+        const exerciseName = exerciseEntry.exercise.trim().toLowerCase();
+        const topWeight = getExerciseTopWeight(exerciseEntry);
+        const previousBest = bestByExercise.get(exerciseName) ?? 0;
+
+        if (!exerciseName || Number.isNaN(topWeight)) {
+          return;
+        }
+
+        if (topWeight > previousBest && previousBest > 0) {
+          prDateKeys.add(getDateKey(new Date(getWorkoutTime(workout))));
+        }
+
+        if (topWeight > previousBest) {
+          bestByExercise.set(exerciseName, topWeight);
+        }
+      });
+    });
+
+  return prDateKeys;
+}
+
+function getWorkoutType(workout: Workout) {
+  const programDayMatch = workout.notes.match(/Started from .+ - ([^.]+)\./);
+
+  if (programDayMatch?.[1]) {
+    return programDayMatch[1];
+  }
+
+  const muscleCounts = new Map<string, number>();
+
+  workout.exercises.forEach((exerciseEntry) => {
+    muscleCounts.set(
+      exerciseEntry.muscleGroup,
+      (muscleCounts.get(exerciseEntry.muscleGroup) ?? 0) + 1
+    );
+  });
+
+  return (
+    Array.from(muscleCounts.entries()).sort(
+      (firstGroup, secondGroup) => secondGroup[1] - firstGroup[1]
+    )[0]?.[0] ?? "Workout"
+  );
+}
+
+function getEstimatedPlannedWeekdays(programs: TrainingProgram[]) {
+  const activeProgram = programs[0];
+
+  if (!activeProgram) {
+    return new Set<number>();
+  }
+
+  const programDays = getProgramDays(activeProgram);
+  const trainingDayCount =
+    programDays.filter((day) => !day.isRestDay && day.exercises.length > 0).length ||
+    Number(activeProgram.daysPerWeek) ||
+    0;
+  const plannedPatterns: Record<number, number[]> = {
+    1: [1],
+    2: [1, 4],
+    3: [1, 3, 5],
+    4: [1, 2, 4, 5],
+    5: [1, 2, 3, 4, 5],
+    6: [1, 2, 3, 4, 5, 6],
+    7: [0, 1, 2, 3, 4, 5, 6],
+  };
+
+  return new Set(plannedPatterns[Math.min(Math.max(trainingDayCount, 0), 7)] ?? []);
+}
+
+function buildWorkoutCalendar(workouts: Workout[], programs: TrainingProgram[]) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const plannedWeekdays = getEstimatedPlannedWeekdays(programs);
+  const prDateKeys = buildPrDateKeys(workouts);
+  const workoutsByDate = new Map<string, Workout[]>();
+
+  workouts.forEach((workout) => {
+    const dateKey = getDateKey(new Date(getWorkoutTime(workout)));
+    workoutsByDate.set(dateKey, [...(workoutsByDate.get(dateKey) ?? []), workout]);
+  });
+
+  const leadingEmptyDays = Array.from({ length: monthStart.getDay() }, () => null);
+  const calendarDays: WorkoutCalendarDay[] = [];
+
+  for (let dayNumber = 1; dayNumber <= monthEnd.getDate(); dayNumber += 1) {
+    const date = new Date(now.getFullYear(), now.getMonth(), dayNumber);
+    const dateKey = getDateKey(date);
+    const dayWorkouts = workoutsByDate.get(dateKey) ?? [];
+    const isFuture = date.getTime() > new Date().setHours(23, 59, 59, 999);
+    const isPlanned = plannedWeekdays.has(date.getDay());
+    const hasPr = prDateKeys.has(dateKey);
+    const status =
+      dayWorkouts.length > 0
+        ? "completed"
+        : isFuture
+          ? "future"
+          : isPlanned
+            ? "skipped"
+            : "recovery";
+
+    calendarDays.push({
+      dateKey,
+      dayNumber,
+      weekday: date.getDay(),
+      isToday: dateKey === getDateKey(now),
+      isFuture,
+      isPlanned,
+      hasPr,
+      workouts: dayWorkouts,
+      workoutType: dayWorkouts[0] ? getWorkoutType(dayWorkouts[0]) : "",
+      status,
+    });
+  }
+
+  return {
+    monthName: now.toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    }),
+    days: [...leadingEmptyDays, ...calendarDays],
+  };
+}
+
+function buildActivityGrid(workouts: Workout[], programs: TrainingProgram[]) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(today.getDate() - 83);
+  const plannedWeekdays = getEstimatedPlannedWeekdays(programs);
+  const prDateKeys = buildPrDateKeys(workouts);
+  const workoutsByDate = new Map<string, Workout[]>();
+
+  workouts.forEach((workout) => {
+    const dateKey = getDateKey(new Date(getWorkoutTime(workout)));
+    workoutsByDate.set(dateKey, [...(workoutsByDate.get(dateKey) ?? []), workout]);
+  });
+
+  return Array.from({ length: 84 }, (_item, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const dateKey = getDateKey(date);
+    const dayWorkouts = workoutsByDate.get(dateKey) ?? [];
+    const isPlanned = plannedWeekdays.has(date.getDay());
+    const hasPr = prDateKeys.has(dateKey);
+    const status =
+      dayWorkouts.length > 0
+        ? "completed"
+        : isPlanned
+          ? "skipped"
+          : "recovery";
+
+    return {
+      dateKey,
+      label: date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      }),
+      count: dayWorkouts.length,
+      status,
+      hasPr,
+    };
+  });
+}
+
+function getCalendarDayClasses(day: WorkoutCalendarDay) {
+  if (day.status === "completed" && day.hasPr) {
+    return "border-green-400/50 bg-green-500/20 shadow-[0_0_22px_rgba(34,197,94,0.18)]";
+  }
+
+  if (day.status === "completed") {
+    return "border-blue-400/40 bg-blue-500/15";
+  }
+
+  if (day.status === "skipped") {
+    return "border-yellow-400/40 bg-yellow-500/10";
+  }
+
+  if (day.status === "recovery") {
+    return "border-cyan-400/20 bg-cyan-500/10";
+  }
+
+  return "border-gray-800 bg-gray-950/60 opacity-70";
+}
+
+function getActivityGridClasses(status: string, hasPr: boolean, count: number) {
+  if (hasPr) {
+    return "bg-green-400";
+  }
+
+  if (status === "completed") {
+    return count > 1 ? "bg-blue-400" : "bg-blue-600";
+  }
+
+  if (status === "skipped") {
+    return "bg-yellow-500";
+  }
+
+  return "bg-gray-800";
+}
+
 function getVolumeStatus(sets: number) {
   if (sets >= 10 && sets <= 20) {
     return "In target range";
@@ -872,6 +1108,7 @@ function getDeloadToneClasses(tone: string) {
 
 export default function ProgressPage() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [programs, setPrograms] = useState<TrainingProgram[]>([]);
   const [selectedTrendExercise, setSelectedTrendExercise] = useState("");
   const [selectedProgressTab, setSelectedProgressTab] =
     useState<ProgressTab>("Strength");
@@ -889,12 +1126,19 @@ export default function ProgressPage() {
 
       if (currentUserId) {
         try {
-          setWorkouts(await loadWorkoutsFromSupabase());
+          const [savedWorkouts, savedPrograms] = await Promise.all([
+            loadWorkoutsFromSupabase(),
+            loadProgramsFromSupabase(),
+          ]);
+          setWorkouts(savedWorkouts);
+          setPrograms(savedPrograms);
         } catch {
           setWorkouts(loadWorkouts());
+          setPrograms(loadTrainingPrograms());
         }
       } else {
         setWorkouts(loadWorkouts());
+        setPrograms(loadTrainingPrograms());
       }
     }
 
@@ -992,6 +1236,8 @@ export default function ProgressPage() {
   const filteredWeeklyHardSets = calculateWeeklyHardSets(filteredWorkouts);
   const exerciseTrend = buildExerciseTrend(workouts, activeTrendExercise);
   const monthlyRecap = calculateMonthlyRecap(workouts);
+  const workoutCalendar = buildWorkoutCalendar(workouts, programs);
+  const activityGrid = buildActivityGrid(workouts, programs);
   const advancedProgress = calculateAdvancedProgress(workouts);
   const highestTrendEstimate = Math.max(
     ...exerciseTrend.map((trendPoint) => trendPoint.estimatedOneRepMax),
@@ -1365,6 +1611,150 @@ export default function ProgressPage() {
                 </div>
               </div>
             )}
+          </CollapsibleSection>
+        </div>
+
+        <div className="mb-8">
+          <CollapsibleSection
+            title="Workout Calendar"
+            description="See completed workouts, planned misses, recovery days, workout types, and PR days."
+          >
+            <div className="space-y-6">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                    {workoutCalendar.monthName}
+                  </p>
+                  <h2 className="mt-1 text-2xl font-bold">
+                    Training consistency at a glance
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm text-gray-400">
+                    Planned days are estimated from your saved program frequency.
+                    Later, a true schedule can make skipped days exact.
+                  </p>
+                </div>
+
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <span className="h-3 w-3 rounded-sm bg-blue-600" />
+                    Completed
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <span className="h-3 w-3 rounded-sm bg-green-400" />
+                    PR day
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <span className="h-3 w-3 rounded-sm bg-yellow-500" />
+                    Skipped planned
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <span className="h-3 w-3 rounded-sm bg-cyan-500/50" />
+                    Recovery
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+                <div className="mb-3 grid grid-cols-7 gap-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  {weekdayLabels.map((label) => (
+                    <p key={label}>{label}</p>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-2">
+                  {workoutCalendar.days.map((day, index) =>
+                    day ? (
+                      <div
+                        key={day.dateKey}
+                        className={
+                          "min-h-24 rounded-lg border p-2 transition hover:-translate-y-0.5 " +
+                          getCalendarDayClasses(day) +
+                          (day.isToday ? " ring-2 ring-blue-400/70" : "")
+                        }
+                        title={`${day.dateKey}: ${
+                          day.workouts.length
+                            ? `${day.workouts.length} workout(s)`
+                            : day.status === "skipped"
+                              ? "Skipped planned day"
+                              : day.status === "recovery"
+                                ? "Recovery day"
+                                : "Future day"
+                        }`}
+                      >
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <p className="font-semibold">{day.dayNumber}</p>
+                          {day.hasPr && (
+                            <span className="rounded-full bg-green-400 px-1.5 py-0.5 text-[10px] font-bold text-gray-950">
+                              PR
+                            </span>
+                          )}
+                        </div>
+
+                        {day.workouts.length > 0 ? (
+                          <div className="space-y-1">
+                            <p className="truncate text-xs font-semibold text-white">
+                              {day.workoutType}
+                            </p>
+                            <p className="text-[11px] text-gray-400">
+                              {day.workouts.length}{" "}
+                              {day.workouts.length === 1 ? "workout" : "workouts"}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] font-semibold text-gray-400">
+                            {day.status === "skipped"
+                              ? "Skipped"
+                              : day.status === "recovery"
+                                ? "Recovery"
+                                : day.isPlanned
+                                  ? "Planned"
+                                  : ""}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div
+                        key={`empty-${index}`}
+                        className="min-h-24 rounded-lg border border-transparent"
+                      />
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-400">12-Week Activity Grid</p>
+                    <h3 className="text-xl font-semibold">
+                      Workout density and missed planned days
+                    </h3>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    Dark squares are recovery/unplanned days.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-12 gap-2">
+                  {activityGrid.map((day) => (
+                    <div
+                      key={day.dateKey}
+                      className={
+                        "aspect-square rounded-sm " +
+                        getActivityGridClasses(day.status, day.hasPr, day.count)
+                      }
+                      title={`${day.label}: ${
+                        day.count
+                          ? `${day.count} workout(s)`
+                          : day.status === "skipped"
+                            ? "skipped planned day"
+                            : "recovery day"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           </CollapsibleSection>
         </div>
 
