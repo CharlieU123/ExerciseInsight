@@ -1,16 +1,103 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  anatomyMuscleRegions,
-  type AnatomySide,
-  type MuscleRegion,
-} from "../lib/anatomyHeatmap";
+  BodyChart,
+  MUSCLE_MAP,
+  ViewSide,
+  type BodyState,
+  type MuscleId,
+} from "body-muscles";
 import type { Workout } from "../lib/fitnessData";
 
 type MuscleSoreness = {
   muscleGroup: string;
   soreness: number;
+};
+
+type ChartView = "front" | "back";
+
+const muscleGroupToBodyIds: Record<string, MuscleId[]> = {
+  Chest: [
+    "chest-upper-left",
+    "chest-upper-right",
+    "chest-lower-left",
+    "chest-lower-right",
+  ],
+  Back: [
+    "lats-upper-left",
+    "lats-mid-left",
+    "lats-lower-left",
+    "lats-upper-right",
+    "lats-mid-right",
+    "lats-lower-right",
+    "lower-back-erectors-left",
+    "lower-back-ql-left",
+    "lower-back-erectors-right",
+    "lower-back-ql-right",
+    "spine",
+  ],
+  Shoulders: [
+    "shoulder-front-left",
+    "shoulder-front-right",
+    "shoulder-side-left",
+    "shoulder-side-right",
+    "deltoid-rear-left",
+    "deltoid-rear-right",
+    "traps-upper-left",
+    "traps-mid-left",
+    "traps-lower-left",
+    "traps-upper-right",
+    "traps-mid-right",
+    "traps-lower-right",
+  ],
+  Biceps: ["biceps-left", "biceps-right"],
+  Triceps: [
+    "triceps-long-left",
+    "triceps-lateral-left",
+    "triceps-long-right",
+    "triceps-lateral-right",
+  ],
+  Quads: ["quads-left", "quads-right", "adductors-left", "adductors-right"],
+  Hamstrings: [
+    "hamstrings-medial-left",
+    "hamstrings-lateral-left",
+    "hamstrings-medial-right",
+    "hamstrings-lateral-right",
+  ],
+  Glutes: [
+    "gluteus-medius-left",
+    "gluteus-maximus-left",
+    "gluteus-medius-right",
+    "gluteus-maximus-right",
+  ],
+  Calves: [
+    "calves-gastroc-medial-left",
+    "calves-gastroc-lateral-left",
+    "calves-soleus-left",
+    "calves-gastroc-medial-right",
+    "calves-gastroc-lateral-right",
+    "calves-soleus-right",
+  ],
+  Core: [
+    "abs-upper-left",
+    "abs-upper-right",
+    "abs-lower-left",
+    "abs-lower-right",
+    "serratus-anterior-left",
+    "serratus-anterior-right",
+    "obliques-left",
+    "obliques-right",
+  ],
+  Forearms: [
+    "forearm-left",
+    "forearm-right",
+    "forearm-flexors-left",
+    "forearm-extensors-left",
+    "forearm-flexors-right",
+    "forearm-extensors-right",
+  ],
+  Neck: ["head", "face", "neck-right", "neck-left", "head-back", "nape"],
 };
 
 function getRecentWorkouts(workouts: Workout[], daysBack: number) {
@@ -50,18 +137,6 @@ function getSorenessByMuscle(workouts: Workout[]) {
     .sort((first, second) => second.soreness - first.soreness);
 }
 
-function getRegionSoreness(region: MuscleRegion, sorenessValues: MuscleSoreness[]) {
-  const matchingValues = sorenessValues
-    .filter((entry) => region.muscleGroups.includes(entry.muscleGroup))
-    .map((entry) => entry.soreness);
-
-  if (matchingValues.length === 0) {
-    return 0;
-  }
-
-  return Math.max(...matchingValues);
-}
-
 function getSorenessLabel(soreness: number) {
   if (soreness >= 2.5) {
     return "High";
@@ -78,150 +153,129 @@ function getSorenessLabel(soreness: number) {
   return "No soreness";
 }
 
-function getSorenessClasses(soreness: number, isSelected: boolean) {
-  const baseClasses =
-    "cursor-pointer stroke-white stroke-[2] transition duration-200 hover:brightness-110 focus:outline-none";
-  const selectedClasses = isSelected
-    ? " stroke-cyan-200 stroke-[3] drop-shadow-[0_0_18px_rgba(34,211,238,0.5)]"
-    : "";
-
-  if (soreness >= 2.5) {
-    return baseClasses + selectedClasses + " fill-red-500";
+function sorenessToIntensity(soreness: number) {
+  if (soreness <= 0) {
+    return 0;
   }
 
-  if (soreness >= 1.5) {
-    return baseClasses + selectedClasses + " fill-orange-400";
-  }
-
-  if (soreness > 0) {
-    return baseClasses + selectedClasses + " fill-yellow-300";
-  }
-
-  return baseClasses + selectedClasses + " fill-lime-300";
+  return Math.max(1, Math.min(10, Math.round((soreness / 3) * 10)));
 }
 
-function BodyFrame() {
-  return (
-    <g aria-hidden="true">
-      <rect width="300" height="610" rx="28" className="fill-slate-100" />
-      <path
-        d="M122 45 C122 22 178 22 178 45 C178 69 165 83 150 83 C135 83 122 69 122 45 Z"
-        className="fill-slate-300 stroke-slate-400"
-      />
-      <path
-        d="M96 126 C108 92 130 91 150 102 C170 91 192 92 204 126 L218 276 C222 327 196 367 150 367 C104 367 78 327 82 276 Z"
-        className="fill-slate-200 stroke-slate-400"
-      />
-      <path
-        d="M150 104 C146 148 146 217 150 333"
-        className="fill-none stroke-slate-300"
-        strokeLinecap="round"
-        strokeWidth="3"
-      />
-      <path
-        d="M89 132 C58 163 43 232 50 326"
-        className="fill-none stroke-slate-300"
-        strokeLinecap="round"
-        strokeWidth="24"
-      />
-      <path
-        d="M211 132 C242 163 257 232 250 326"
-        className="fill-none stroke-slate-300"
-        strokeLinecap="round"
-        strokeWidth="24"
-      />
-      <path
-        d="M121 360 C103 430 99 514 106 590"
-        className="fill-none stroke-slate-300"
-        strokeLinecap="round"
-        strokeWidth="28"
-      />
-      <path
-        d="M179 360 C197 430 201 514 194 590"
-        className="fill-none stroke-slate-300"
-        strokeLinecap="round"
-        strokeWidth="28"
-      />
-    </g>
+function buildBodyState(
+  sorenessValues: MuscleSoreness[],
+  selectedMuscleId: MuscleId | null
+) {
+  const nextState: BodyState = {};
+
+  sorenessValues.forEach((entry) => {
+    const bodyIds = muscleGroupToBodyIds[entry.muscleGroup] ?? [];
+    const intensity = sorenessToIntensity(entry.soreness);
+
+    bodyIds.forEach((id) => {
+      nextState[id] = {
+        intensity,
+        selected: id === selectedMuscleId,
+      };
+    });
+  });
+
+  if (selectedMuscleId && !nextState[selectedMuscleId]) {
+    nextState[selectedMuscleId] = {
+      intensity: 0,
+      selected: true,
+    };
+  }
+
+  return nextState;
+}
+
+function getMuscleName(muscleId: MuscleId | null) {
+  if (!muscleId) {
+    return "No muscle selected";
+  }
+
+  return MUSCLE_MAP.find((muscle) => muscle.id === muscleId)?.name ?? muscleId;
+}
+
+function getMuscleSoreness(
+  muscleId: MuscleId | null,
+  sorenessValues: MuscleSoreness[]
+) {
+  if (!muscleId) {
+    return 0;
+  }
+
+  const matchingEntry = sorenessValues.find((entry) =>
+    (muscleGroupToBodyIds[entry.muscleGroup] ?? []).includes(muscleId)
   );
+
+  return matchingEntry?.soreness ?? 0;
 }
 
-function AnatomySvg({
-  side,
-  selectedRegionId,
-  hoveredRegionId,
-  sorenessValues,
-  onSelectRegion,
-  onHoverRegion,
+function BodyMusclesMap({
+  view,
+  bodyState,
+  onSelectMuscle,
 }: {
-  side: AnatomySide;
-  selectedRegionId: string;
-  hoveredRegionId: string | null;
-  sorenessValues: MuscleSoreness[];
-  onSelectRegion: (regionId: string) => void;
-  onHoverRegion: (regionId: string | null) => void;
+  view: ChartView;
+  bodyState: BodyState;
+  onSelectMuscle: (id: MuscleId) => void;
 }) {
-  const regions = anatomyMuscleRegions.filter((region) => region.side === side);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<BodyChart | null>(null);
+  const viewSide = view === "front" ? ViewSide.FRONT : ViewSide.BACK;
+
+  useEffect(() => {
+    if (!containerRef.current) {
+      return;
+    }
+
+    chartRef.current = new BodyChart(containerRef.current, {
+      view: viewSide,
+      bodyState: {},
+      onMuscleClick: (id) => onSelectMuscle(id),
+      className: "exerciseinsight-body-chart",
+      ariaLabel: `${view === "front" ? "Front" : "Back"} soreness body map`,
+      enableTransitions: true,
+    });
+
+    return () => {
+      chartRef.current?.destroy();
+      chartRef.current = null;
+    };
+  }, [onSelectMuscle, view, viewSide]);
+
+  useEffect(() => {
+    chartRef.current?.update({
+      view: viewSide,
+      bodyState,
+    });
+  }, [bodyState, viewSide]);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-100 p-3">
+    <div className="rounded-2xl border border-pink-400/30 bg-slate-100/95 p-3 shadow-[0_0_30px_rgba(236,72,153,0.16)]">
       <p className="mb-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {side}
+        {view === "front" ? "Front" : "Back"}
       </p>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label={`${side} soreness anatomy map`}
-        viewBox="0 0 300 610"
-        className="mx-auto h-[28rem] w-full max-w-[230px]"
-        onMouseLeave={() => onHoverRegion(null)}
-      >
-        <BodyFrame />
-        <g id={`${side}-muscles`}>
-          {regions.map((region) => {
-            const soreness = getRegionSoreness(region, sorenessValues);
-            const isSelected = region.id === (hoveredRegionId ?? selectedRegionId);
-
-            return (
-              <path
-                key={region.id}
-                id={region.id}
-                d={region.d}
-                role="button"
-                tabIndex={0}
-                data-muscle-group={region.muscleGroups.join(",")}
-                aria-label={`${region.label}: ${getSorenessLabel(soreness)}`}
-                className={getSorenessClasses(soreness, isSelected)}
-                onClick={() => onSelectRegion(region.id)}
-                onFocus={() => onHoverRegion(region.id)}
-                onBlur={() => onHoverRegion(null)}
-                onMouseEnter={() => onHoverRegion(region.id)}
-              >
-                <title>{`${region.label}: ${getSorenessLabel(soreness)}`}</title>
-              </path>
-            );
-          })}
-        </g>
-      </svg>
+      <div ref={containerRef} className="mx-auto h-[28rem] w-full max-w-[260px]" />
     </div>
   );
 }
 
 export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
-  const [selectedRegionId, setSelectedRegionId] = useState("chest-lower-left");
-  const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+  const [selectedMuscleId, setSelectedMuscleId] = useState<MuscleId | null>(
+    "chest-lower-left"
+  );
   const recentWorkouts = useMemo(() => getRecentWorkouts(workouts, 14), [workouts]);
   const sorenessValues = useMemo(
     () => getSorenessByMuscle(recentWorkouts),
     [recentWorkouts]
   );
-  const activeRegion =
-    anatomyMuscleRegions.find(
-      (region) => region.id === (hoveredRegionId ?? selectedRegionId)
-    ) ?? anatomyMuscleRegions[0];
-  const activeSoreness = activeRegion
-    ? getRegionSoreness(activeRegion, sorenessValues)
-    : 0;
+  const bodyState = useMemo(
+    () => buildBodyState(sorenessValues, selectedMuscleId),
+    [selectedMuscleId, sorenessValues]
+  );
+  const activeSoreness = getMuscleSoreness(selectedMuscleId, sorenessValues);
   const topSoreMuscles = sorenessValues.slice(0, 5);
 
   return (
@@ -232,13 +286,13 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
         </p>
         <h3 className="mt-2 text-2xl font-bold">Muscle Recovery</h3>
         <p className="mt-2 text-sm text-gray-400">
-          Every colored muscle is its own SVG path with an ID. Hover or click a
+          Detailed body map powered by 70+ anatomical SVG regions. Click a
           muscle to inspect soreness from the last 14 days.
         </p>
 
         <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-400">
           <span className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-lime-300" />
+            <span className="h-3 w-3 rounded-full bg-slate-400" />
             None
           </span>
           <span className="flex items-center gap-2">
@@ -258,15 +312,12 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
 
       <div className="grid gap-5">
         <div className="grid gap-3 sm:grid-cols-2">
-          {(["front", "back"] as const).map((side) => (
-            <AnatomySvg
-              key={side}
-              side={side}
-              selectedRegionId={selectedRegionId}
-              hoveredRegionId={hoveredRegionId}
-              sorenessValues={sorenessValues}
-              onSelectRegion={setSelectedRegionId}
-              onHoverRegion={setHoveredRegionId}
+          {(["front", "back"] as const).map((view) => (
+            <BodyMusclesMap
+              key={view}
+              view={view}
+              bodyState={bodyState}
+              onSelectMuscle={setSelectedMuscleId}
             />
           ))}
         </div>
@@ -277,7 +328,7 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
               Selected Area
             </p>
             <h4 className="mt-2 text-2xl font-bold">
-              {activeRegion ? activeRegion.label : "No muscle selected"}
+              {getMuscleName(selectedMuscleId)}
             </h4>
             <p className="mt-1 text-sm text-gray-300">
               {getSorenessLabel(activeSoreness)} soreness
@@ -287,7 +338,7 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
             </p>
             <div className="mt-4 h-2 rounded-full bg-gray-800">
               <div
-                className="h-2 rounded-full bg-gradient-to-r from-lime-300 via-yellow-300 via-orange-400 to-red-500"
+                className="h-2 rounded-full bg-gradient-to-r from-slate-400 via-yellow-300 via-orange-400 to-red-500"
                 style={{
                   width:
                     Math.max(
@@ -307,18 +358,15 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
           ) : (
             topSoreMuscles.map((entry) => {
               const width = Math.max((entry.soreness / 3) * 100, 12) + "%";
+              const firstBodyId = muscleGroupToBodyIds[entry.muscleGroup]?.[0];
 
               return (
                 <button
                   key={entry.muscleGroup}
                   type="button"
                   onClick={() => {
-                    const matchingRegion = anatomyMuscleRegions.find((region) =>
-                      region.muscleGroups.includes(entry.muscleGroup)
-                    );
-
-                    if (matchingRegion) {
-                      setSelectedRegionId(matchingRegion.id);
+                    if (firstBodyId) {
+                      setSelectedMuscleId(firstBodyId);
                     }
                   }}
                   className="w-full rounded-2xl border border-gray-800 bg-gray-900/70 p-4 text-left transition hover:border-cyan-400/40 hover:bg-gray-900"
@@ -331,7 +379,7 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
                   </div>
                   <div className="h-2 rounded-full bg-gray-800">
                     <div
-                      className="h-2 rounded-full bg-gradient-to-r from-lime-300 via-yellow-300 via-orange-400 to-red-500"
+                      className="h-2 rounded-full bg-gradient-to-r from-slate-400 via-yellow-300 via-orange-400 to-red-500"
                       style={{ width }}
                     />
                   </div>
