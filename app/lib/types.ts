@@ -63,6 +63,8 @@ export type ExerciseLibraryItem = {
   defaultReps: string;
   cues: string[];
   substitutions: string[];
+  movement?: string;
+  level?: string;
 };
 
 export type Profile = {

@@ -19,12 +19,14 @@ import {
 import { getCurrentUserId } from "../lib/supabaseWorkouts";
 
 const allMuscles = "All";
+const allMovements = "All";
 
 export default function ExerciseLibraryPage() {
   const router = useRouter();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [muscleFilter, setMuscleFilter] = useState(allMuscles);
+  const [movementFilter, setMovementFilter] = useState(allMovements);
   const [copiedExercise, setCopiedExercise] = useState("");
   const [customExercises, setCustomExercises] = useState<ExerciseLibraryItem[]>([]);
   const [userId, setUserId] = useState("");
@@ -66,6 +68,19 @@ export default function ExerciseLibraryPage() {
     () => [...exerciseLibrary, ...customExercises],
     [customExercises]
   );
+  const movementOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          allExercises
+            .map((libraryExercise) => libraryExercise.movement ?? "Strength")
+            .filter(Boolean)
+        )
+      ).sort((firstMovement, secondMovement) =>
+        firstMovement.localeCompare(secondMovement)
+      ),
+    [allExercises]
+  );
 
   const filteredExercises = useMemo(
     () =>
@@ -75,17 +90,23 @@ export default function ExerciseLibraryPage() {
           search === "" ||
           libraryExercise.exercise.toLowerCase().includes(search) ||
           libraryExercise.target.toLowerCase().includes(search) ||
+          libraryExercise.equipment.toLowerCase().includes(search) ||
+          (libraryExercise.movement ?? "").toLowerCase().includes(search) ||
           libraryExercise.substitutions.some((substitution) =>
             substitution.toLowerCase().includes(search)
           );
         const matchesMuscle =
           muscleFilter === allMuscles ||
           libraryExercise.muscleGroup === muscleFilter;
+        const matchesMovement =
+          movementFilter === allMovements ||
+          (libraryExercise.movement ?? "Strength") === movementFilter;
 
-        return matchesSearch && matchesMuscle;
+        return matchesSearch && matchesMuscle && matchesMovement;
       }),
-    [allExercises, muscleFilter, searchTerm]
+    [allExercises, movementFilter, muscleFilter, searchTerm]
   );
+  const visibleExercises = filteredExercises.slice(0, 120);
 
   async function copyExerciseName(exerciseName: string) {
     try {
@@ -326,7 +347,7 @@ export default function ExerciseLibraryPage() {
           title="Find Exercises"
           description="Search by exercise, target muscle, or substitution."
         >
-          <div className="grid gap-4 md:grid-cols-[1fr_240px_auto] md:items-end">
+          <div className="grid gap-4 md:grid-cols-[1fr_220px_220px_auto] md:items-end">
             <div>
               <label htmlFor="library-search" className="mb-1 block text-sm text-gray-300">
                 Search
@@ -334,12 +355,21 @@ export default function ExerciseLibraryPage() {
               <input
                 id="library-search"
                 name="library-search"
+                list="library-exercise-suggestions"
                 className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
                 type="text"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Bench, quads, cable..."
               />
+              <datalist id="library-exercise-suggestions">
+                {filteredExercises.slice(0, 30).map((libraryExercise) => (
+                  <option
+                    key={libraryExercise.exercise}
+                    value={libraryExercise.exercise}
+                  />
+                ))}
+              </datalist>
             </div>
 
             <div>
@@ -362,21 +392,49 @@ export default function ExerciseLibraryPage() {
               </select>
             </div>
 
+            <div>
+              <label htmlFor="movement-filter" className="mb-1 block text-sm text-gray-300">
+                Movement
+              </label>
+              <select
+                id="movement-filter"
+                name="movement-filter"
+                className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                value={movementFilter}
+                onChange={(event) => setMovementFilter(event.target.value)}
+              >
+                <option value={allMovements}>All</option>
+                {movementOptions.map((movement) => (
+                  <option key={movement} value={movement}>
+                    {movement}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="button"
               onClick={() => {
                 setSearchTerm("");
                 setMuscleFilter(allMuscles);
+                setMovementFilter(allMovements);
               }}
               className="rounded-md bg-gray-800 px-4 py-3 font-semibold hover:bg-gray-700"
             >
               Clear
             </button>
           </div>
+          <p className="mt-3 text-sm text-gray-400">
+            Showing {filteredExercises.length.toLocaleString()} of{" "}
+            {allExercises.length.toLocaleString()} exercises.
+            {filteredExercises.length > visibleExercises.length
+              ? ` Displaying the first ${visibleExercises.length}. Use search or filters to narrow the list.`
+              : ""}
+          </p>
         </CollapsibleSection>
 
         <div className="mt-8 grid gap-4 md:grid-cols-2">
-          {filteredExercises.map((libraryExercise) => (
+          {visibleExercises.map((libraryExercise) => (
             <article
               key={libraryExercise.exercise}
               className="rounded-lg border border-gray-800 bg-gray-900 p-5 shadow-xl shadow-black/10"
@@ -390,6 +448,16 @@ export default function ExerciseLibraryPage() {
                   <p className="mt-1 text-sm text-gray-400">
                     {libraryExercise.equipment}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-gray-300">
+                      {libraryExercise.movement ?? "Strength"}
+                    </span>
+                    {libraryExercise.level && (
+                      <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-gray-300">
+                        {libraryExercise.level}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-2">

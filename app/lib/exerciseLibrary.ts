@@ -1,6 +1,7 @@
 import type { ExerciseLibraryItem } from "./types";
+import { megaExerciseLibrary } from "./megaExerciseLibrary";
 
-export const exerciseLibrary: ExerciseLibraryItem[] = [
+const baseExerciseLibrary: ExerciseLibraryItem[] = [
   {
     exercise: "Bench Press",
     muscleGroup: "Chest",
@@ -511,4 +512,15 @@ export const exerciseLibrary: ExerciseLibraryItem[] = [
     cues: ["Push with legs first", "Finish with arms", "Return under control"],
     substitutions: ["Bike", "Treadmill Run", "Ski Erg"],
   },
+];
+
+const baseExerciseNames = new Set(
+  baseExerciseLibrary.map((exercise) => exercise.exercise.toLowerCase())
+);
+
+export const exerciseLibrary: ExerciseLibraryItem[] = [
+  ...baseExerciseLibrary,
+  ...megaExerciseLibrary.filter(
+    (exercise) => !baseExerciseNames.has(exercise.exercise.toLowerCase())
+  ),
 ];

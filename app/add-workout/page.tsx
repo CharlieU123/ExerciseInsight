@@ -80,6 +80,8 @@ type TemplateName = keyof typeof workoutTemplates;
 
 const activeWorkoutDraftKey = "exerciseinsight-active-workout-draft";
 const defaultRestSeconds = 90;
+const allLibraryMuscles = "All";
+const allLibraryMovements = "All";
 
 type ActiveWorkoutDraft = {
   workoutDate: string;
@@ -555,6 +557,10 @@ function buildCompletedWorkoutSummary(
 export default function AddWorkoutPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedLibraryExercise, setSelectedLibraryExercise] = useState("");
+  const [librarySearchTerm, setLibrarySearchTerm] = useState("");
+  const [libraryMuscleFilter, setLibraryMuscleFilter] = useState(allLibraryMuscles);
+  const [libraryMovementFilter, setLibraryMovementFilter] =
+    useState(allLibraryMovements);
   const [editingCurrentExerciseId, setEditingCurrentExerciseId] = useState<
     AppId | null
   >(null);
@@ -1437,6 +1443,34 @@ export default function AddWorkoutPage() {
   }
 
   const allLibraryExercises = [...exerciseLibrary, ...customExercises];
+  const libraryMovementOptions = Array.from(
+    new Set(
+      allLibraryExercises
+        .map((libraryExercise) => libraryExercise.movement ?? "Strength")
+        .filter(Boolean)
+    )
+  ).sort((firstMovement, secondMovement) =>
+    firstMovement.localeCompare(secondMovement)
+  );
+  const librarySearch = librarySearchTerm.trim().toLowerCase();
+  const filteredLibraryExercises = allLibraryExercises
+    .filter((libraryExercise) => {
+      const matchesSearch =
+        librarySearch === "" ||
+        libraryExercise.exercise.toLowerCase().includes(librarySearch) ||
+        libraryExercise.target.toLowerCase().includes(librarySearch) ||
+        libraryExercise.equipment.toLowerCase().includes(librarySearch) ||
+        (libraryExercise.movement ?? "").toLowerCase().includes(librarySearch);
+      const matchesMuscle =
+        libraryMuscleFilter === allLibraryMuscles ||
+        libraryExercise.muscleGroup === libraryMuscleFilter;
+      const matchesMovement =
+        libraryMovementFilter === allLibraryMovements ||
+        (libraryExercise.movement ?? "Strength") === libraryMovementFilter;
+
+      return matchesSearch && matchesMuscle && matchesMovement;
+    })
+    .slice(0, 80);
   const selectedLibraryItem = allLibraryExercises.find(
     (item) => item.exercise === selectedLibraryExercise
   );
@@ -1623,6 +1657,75 @@ export default function AddWorkoutPage() {
                   Exercise Library{" "}
                   <span className="text-xs text-gray-500">(optional)</span>
                 </label>
+                <div className="mb-3 grid gap-3 md:grid-cols-[1fr_180px_180px]">
+                  <div>
+                    <input
+                      id="exercise-library-search"
+                      name="exercise-library-search"
+                      list="add-workout-exercise-suggestions"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      type="text"
+                      value={librarySearchTerm}
+                      onChange={(event) => setLibrarySearchTerm(event.target.value)}
+                      placeholder="Start typing: bench, row, cable..."
+                    />
+                    <datalist id="add-workout-exercise-suggestions">
+                      {filteredLibraryExercises.slice(0, 30).map((libraryExercise) => (
+                        <option
+                          key={libraryExercise.exercise}
+                          value={libraryExercise.exercise}
+                        />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <select
+                    aria-label="Filter library by muscle group"
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={libraryMuscleFilter}
+                    onChange={(event) => setLibraryMuscleFilter(event.target.value)}
+                  >
+                    <option value={allLibraryMuscles}>All muscles</option>
+                    {muscleGroups.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    aria-label="Filter library by movement"
+                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={libraryMovementFilter}
+                    onChange={(event) => setLibraryMovementFilter(event.target.value)}
+                  >
+                    <option value={allLibraryMovements}>All movements</option>
+                    {libraryMovementOptions.map((movement) => (
+                      <option key={movement} value={movement}>
+                        {movement}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {librarySearchTerm.trim() && filteredLibraryExercises.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {filteredLibraryExercises.slice(0, 6).map((libraryExercise) => (
+                      <button
+                        key={libraryExercise.exercise}
+                        type="button"
+                        onClick={() => {
+                          selectExerciseFromLibrary(libraryExercise.exercise);
+                          setLibrarySearchTerm(libraryExercise.exercise);
+                        }}
+                        className="rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-white/15"
+                      >
+                        {libraryExercise.exercise}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <select
                   id="exercise-library"
                   name="exercise-library"
@@ -1630,16 +1733,23 @@ export default function AddWorkoutPage() {
                   value={selectedLibraryExercise}
                   onChange={(event) => selectExerciseFromLibrary(event.target.value)}
                 >
-                  <option value="">Choose from library</option>
-                  {allLibraryExercises.map((libraryExercise) => (
+                  <option value="">
+                    Choose from {filteredLibraryExercises.length} matching exercises
+                  </option>
+                  {filteredLibraryExercises.map((libraryExercise) => (
                     <option
                       key={libraryExercise.exercise}
                       value={libraryExercise.exercise}
                     >
                       {libraryExercise.exercise} - {libraryExercise.muscleGroup}
+                      {libraryExercise.movement ? ` - ${libraryExercise.movement}` : ""}
                     </option>
                   ))}
                 </select>
+                <p className="mt-2 text-xs text-gray-500">
+                  Showing the first {filteredLibraryExercises.length} matches from{" "}
+                  {allLibraryExercises.length.toLocaleString()} exercises.
+                </p>
 
                 {selectedLibraryItem && (
                   <div className="mt-3 rounded-md border border-gray-800 bg-gray-950 p-3">
