@@ -260,6 +260,95 @@ function getPreviousSetLabel(
   return `${previousSet.weight} x ${previousSet.reps}`;
 }
 
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function getLibraryItem(
+  exerciseName: string,
+  libraryExercises: ExerciseLibraryItem[]
+) {
+  const normalizedExerciseName = normalizeText(exerciseName);
+
+  return libraryExercises.find(
+    (libraryExercise) =>
+      normalizeText(libraryExercise.exercise) === normalizedExerciseName
+  );
+}
+
+function getSwapSuggestions(
+  exerciseEntry: ExerciseEntry,
+  libraryExercises: ExerciseLibraryItem[]
+) {
+  const currentLibraryItem = getLibraryItem(
+    exerciseEntry.exercise,
+    libraryExercises
+  );
+  const explicitSubstitutions = new Set(
+    currentLibraryItem?.substitutions.map(normalizeText) ?? []
+  );
+  const currentTargetWords = new Set(
+    (currentLibraryItem?.target ?? exerciseEntry.muscleGroup)
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((word) => word.length > 3)
+  );
+
+  return libraryExercises
+    .filter(
+      (libraryExercise) =>
+        normalizeText(libraryExercise.exercise) !==
+        normalizeText(exerciseEntry.exercise)
+    )
+    .map((libraryExercise) => {
+      let score = 0;
+      const reasons: string[] = [];
+
+      if (explicitSubstitutions.has(normalizeText(libraryExercise.exercise))) {
+        score += 8;
+        reasons.push("listed substitute");
+      }
+
+      if (libraryExercise.muscleGroup === exerciseEntry.muscleGroup) {
+        score += 4;
+        reasons.push("same primary muscle");
+      }
+
+      if (
+        currentLibraryItem &&
+        libraryExercise.equipment === currentLibraryItem.equipment
+      ) {
+        score += 2;
+        reasons.push("similar equipment");
+      }
+
+      const targetOverlap = libraryExercise.target
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .some((word) => currentTargetWords.has(word));
+
+      if (targetOverlap) {
+        score += 2;
+        reasons.push("similar movement target");
+      }
+
+      return {
+        ...libraryExercise,
+        score,
+        reasons,
+      };
+    })
+    .filter((libraryExercise) => libraryExercise.score > 0)
+    .sort((firstExercise, secondExercise) => {
+      if (secondExercise.score !== firstExercise.score) {
+        return secondExercise.score - firstExercise.score;
+      }
+
+      return firstExercise.exercise.localeCompare(secondExercise.exercise);
+    })
+    .slice(0, 5);
+}
+
 export default function AddWorkoutPage() {
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedLibraryExercise, setSelectedLibraryExercise] = useState("");
@@ -295,6 +384,7 @@ export default function AddWorkoutPage() {
   const [restRemainingSeconds, setRestRemainingSeconds] =
     useState(defaultRestSeconds);
   const [isRestTimerRunning, setIsRestTimerRunning] = useState(false);
+  const [swapExerciseId, setSwapExerciseId] = useState<AppId | null>(null);
 
   useEffect(() => {
     async function loadSavedWorkouts() {
@@ -712,6 +802,34 @@ export default function AddWorkoutPage() {
           : exerciseEntry
       )
     );
+  }
+
+  function swapActiveExercise(
+    exerciseId: AppId,
+    replacementExercise: ExerciseLibraryItem
+  ) {
+    setCurrentExercises((currentWorkoutExercises) =>
+      currentWorkoutExercises.map((exerciseEntry) => {
+        if (exerciseEntry.id !== exerciseId) {
+          return exerciseEntry;
+        }
+
+        const swapNote = `Swapped from ${exerciseEntry.exercise} to ${replacementExercise.exercise}; original program history preserved.`;
+        const updatedNotes = exerciseEntry.notes
+          ? exerciseEntry.notes.includes(swapNote)
+            ? exerciseEntry.notes
+            : `${exerciseEntry.notes} ${swapNote}`
+          : swapNote;
+
+        return {
+          ...exerciseEntry,
+          exercise: replacementExercise.exercise,
+          muscleGroup: replacementExercise.muscleGroup,
+          notes: updatedNotes,
+        };
+      })
+    );
+    setSwapExerciseId(null);
   }
 
   function addActiveSet(exerciseId: AppId) {
@@ -1732,6 +1850,19 @@ export default function AddWorkoutPage() {
                         </button>
                         <button
                           type="button"
+                          onClick={() =>
+                            setSwapExerciseId(
+                              swapExerciseId === exerciseEntry.id
+                                ? null
+                                : exerciseEntry.id
+                            )
+                          }
+                          className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold hover:bg-blue-500"
+                        >
+                          Swap
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => startEditingCurrentExercise(exerciseEntry)}
                           className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
                         >
@@ -1746,6 +1877,68 @@ export default function AddWorkoutPage() {
                         </button>
                       </div>
                     </div>
+
+                    {swapExerciseId === exerciseEntry.id && (
+                      <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-950/20 p-4">
+                        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold uppercase tracking-wide text-blue-200">
+                              Swap {exerciseEntry.exercise}
+                            </p>
+                            <p className="mt-1 text-sm text-gray-300">
+                              Suggestions prioritize same primary muscle, library
+                              substitutions, similar equipment, and target overlap.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSwapExerciseId(null)}
+                            className="w-fit rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                          >
+                            Close
+                          </button>
+                        </div>
+
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {getSwapSuggestions(
+                            exerciseEntry,
+                            allLibraryExercises
+                          ).map((suggestion) => (
+                            <button
+                              key={suggestion.exercise}
+                              type="button"
+                              onClick={() =>
+                                swapActiveExercise(exerciseEntry.id, suggestion)
+                              }
+                              className="rounded-lg border border-gray-800 bg-gray-950 p-3 text-left hover:bg-gray-900"
+                            >
+                              <span className="block font-semibold">
+                                {suggestion.exercise}
+                              </span>
+                              <span className="mt-1 block text-sm text-gray-400">
+                                {suggestion.muscleGroup} · {suggestion.equipment}
+                              </span>
+                              <span className="mt-2 block text-xs text-blue-200">
+                                {suggestion.reasons.join(" · ")}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+
+                        {getSwapSuggestions(exerciseEntry, allLibraryExercises)
+                          .length === 0 && (
+                          <p className="text-sm text-gray-400">
+                            No close substitutions found yet. Add more exercises
+                            to the library to improve suggestions.
+                          </p>
+                        )}
+
+                        <p className="mt-3 text-xs text-gray-500">
+                          Swapping changes this workout only. Past workouts and
+                          the saved program stay unchanged.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="overflow-x-auto">
                       <div className="min-w-[760px]">
