@@ -55,6 +55,25 @@ function getGoalProgress(goal?: FitnessGoal) {
   return Math.min(Math.round((current / target) * 100), 100);
 }
 
+function getTodaysProgramDay(program: TrainingProgram, workouts: Workout[]) {
+  const programDays = getProgramDays(program);
+  const trainingDays = programDays.filter((day) => !day.isRestDay);
+
+  if (trainingDays.length === 0) {
+    return programDays[0] ?? null;
+  }
+
+  return trainingDays[workouts.length % trainingDays.length] ?? trainingDays[0];
+}
+
+function getWorkoutEstimateMinutes(exerciseCount: number) {
+  if (exerciseCount === 0) {
+    return 0;
+  }
+
+  return Math.max(30, exerciseCount * 8 + 15);
+}
+
 function RecoveryRing({ score }: { score: number }) {
   return (
     <div
@@ -188,9 +207,16 @@ export default function HomePage() {
   const currentProgram = programs[0];
   const deloadRecommendation = getDeloadRecommendation(workouts);
   const smartCoachInsight = getSmartCoachInsight(workouts, goals, programs);
-  const currentProgramFirstDay = currentProgram
-    ? getProgramDays(currentProgram)[0]
+  const todaysProgramDay = currentProgram
+    ? getTodaysProgramDay(currentProgram, workouts)
     : null;
+  const todaysWorkoutHref =
+    currentProgram && todaysProgramDay
+      ? `/add-workout?programId=${currentProgram.id}&dayId=${todaysProgramDay.id}`
+      : "/add-workout";
+  const todaysWorkoutEstimate = getWorkoutEstimateMinutes(
+    todaysProgramDay?.exercises.length ?? 0
+  );
   const isNewUser =
     workouts.length === 0 && goals.length === 0 && programs.length === 0;
 
@@ -229,11 +255,7 @@ export default function HomePage() {
             </Link>
             {currentProgram && (
               <Link
-                href={
-                  currentProgramFirstDay
-                    ? `/add-workout?programId=${currentProgram.id}&dayId=${currentProgramFirstDay.id}`
-                    : `/add-workout?programId=${currentProgram.id}`
-                }
+                href={todaysWorkoutHref}
                 className="rounded-2xl bg-green-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
               >
                 Start Current Program
@@ -253,6 +275,61 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+
+        {currentProgram && todaysProgramDay && (
+          <div className="mb-8 rounded-3xl border border-green-400/30 bg-green-950/20 p-5 shadow-xl shadow-green-950/10 sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-green-300">
+                  Today's Workout
+                </p>
+                <h2 className="mt-2 text-3xl font-bold">{todaysProgramDay.name}</h2>
+                <p className="mt-2 text-gray-300">
+                  {todaysProgramDay.isRestDay
+                    ? "Rest day"
+                    : `${todaysProgramDay.exercises.length} exercises · Approximately ${todaysWorkoutEstimate} minutes`}
+                </p>
+                <p className="mt-2 text-sm text-gray-400">
+                  Starts from {currentProgram.name}. ExerciseInsight will load
+                  this exact program day, rep targets, previous weights, and the
+                  active-workout rest timer.
+                </p>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:w-72 lg:grid-cols-1">
+                <Link
+                  href={todaysWorkoutHref}
+                  className="rounded-2xl bg-green-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
+                >
+                  Start Workout
+                </Link>
+                <Link
+                  href="/programs"
+                  className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
+                >
+                  Edit Program
+                </Link>
+              </div>
+            </div>
+
+            {!todaysProgramDay.isRestDay && todaysProgramDay.exercises.length > 0 && (
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                {todaysProgramDay.exercises.slice(0, 4).map((programExercise) => (
+                  <div
+                    key={programExercise.id}
+                    className="rounded-lg border border-gray-800 bg-gray-950 p-3"
+                  >
+                    <p className="font-semibold">{programExercise.exercise}</p>
+                    <p className="text-sm text-gray-400">
+                      {programExercise.muscleGroup} · {programExercise.sets} x{" "}
+                      {programExercise.reps}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mb-8 rounded-3xl border border-cyan-400/30 bg-cyan-950/20 p-5 shadow-xl shadow-cyan-950/10 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -467,14 +544,10 @@ export default function HomePage() {
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Link
-                      href={
-                        currentProgramFirstDay
-                          ? `/add-workout?programId=${currentProgram.id}&dayId=${currentProgramFirstDay.id}`
-                          : `/add-workout?programId=${currentProgram.id}`
-                      }
+                      href={todaysWorkoutHref}
                       className="rounded-md bg-green-600 px-3 py-2 text-center text-sm font-semibold hover:bg-green-500"
                     >
-                      Start Day 1
+                      Start Today
                     </Link>
                     <Link
                       href="/programs"
@@ -485,15 +558,15 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  {currentProgramFirstDay ? (
+                  {todaysProgramDay ? (
                     <div className="rounded-md border border-gray-800 bg-gray-900 p-3">
-                      <p className="font-semibold">Day 1: {currentProgramFirstDay.name}</p>
+                      <p className="font-semibold">Today: {todaysProgramDay.name}</p>
                       <p className="mt-1 text-sm text-gray-400">
-                        {currentProgramFirstDay.isRestDay
+                        {todaysProgramDay.isRestDay
                           ? "Rest day"
-                          : `${currentProgramFirstDay.exercises.length} planned exercises`}
+                          : `${todaysProgramDay.exercises.length} planned exercises`}
                       </p>
-                      {currentProgramFirstDay.exercises.slice(0, 3).map((programExercise) => (
+                      {todaysProgramDay.exercises.slice(0, 3).map((programExercise) => (
                         <p key={programExercise.id} className="mt-2 text-sm text-gray-300">
                           {programExercise.exercise} · {programExercise.sets} x{" "}
                           {programExercise.reps}
@@ -515,7 +588,7 @@ export default function HomePage() {
                     ))
                   )}
                 </div>
-                {!currentProgramFirstDay && currentProgram.exercises.length > 4 && (
+                {!todaysProgramDay && currentProgram.exercises.length > 4 && (
                   <p className="mt-3 text-sm text-gray-400">
                     +{currentProgram.exercises.length - 4} more exercises
                   </p>

@@ -107,15 +107,30 @@ function getNumericRepsDefault(repsValue: string) {
 
 function programExerciseToWorkoutExercise(
   programExercise: ProgramExercise,
-  index: number
+  index: number,
+  workouts: Workout[]
 ): ExerciseEntry {
   const repsDefault = getNumericRepsDefault(programExercise.reps);
-  const setEntries = buildSetEntries(
-    programExercise.sets || "1",
-    "0",
-    repsDefault,
-    "2"
+  const previousPerformance = getPreviousExercisePerformance(
+    workouts,
+    programExercise.exercise
   );
+  const previousSetEntries = previousPerformance
+    ? getExerciseSetEntries(previousPerformance.exercise)
+    : [];
+  const targetSetCount = Math.max(Number(programExercise.sets) || 1, 1);
+  const setEntries = Array.from({ length: targetSetCount }, (_item, setIndex) => {
+    const previousSet = previousSetEntries[setIndex] ?? previousSetEntries[0];
+
+    return {
+      id: Date.now() + index * 100 + setIndex,
+      setNumber: setIndex + 1,
+      weight: previousSet?.weight ?? "0",
+      reps: previousSet?.reps ?? repsDefault,
+      rir: previousSet?.rir ?? "2",
+      didPartials: false,
+    };
+  });
 
   return {
     id: Date.now() + index,
@@ -123,13 +138,22 @@ function programExerciseToWorkoutExercise(
     muscleGroup: programExercise.muscleGroup,
     setEntries,
     sets: String(setEntries.length),
-    weight: "0",
-    reps: repsDefault,
-    rir: "2",
+    weight: setEntries[0]?.weight ?? "0",
+    reps: setEntries[0]?.reps ?? repsDefault,
+    rir: setEntries[0]?.rir ?? "2",
     pump: "0",
     soreness: "0",
     didPartials: false,
-    notes: programExercise.notes,
+    notes: [
+      programExercise.notes,
+      previousPerformance
+        ? `Previous ${previousPerformance.date}: ${summarizeExerciseSets(
+            previousPerformance.exercise
+          )}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" "),
   };
 }
 
@@ -481,7 +505,9 @@ export default function AddWorkoutPage() {
         return;
       }
 
-      const programExercises = selectedDay.exercises.map(programExerciseToWorkoutExercise);
+      const programExercises = selectedDay.exercises.map((programExercise, index) =>
+        programExerciseToWorkoutExercise(programExercise, index, workouts)
+      );
 
       setCurrentExercises(programExercises);
       setSelectedTemplate("");
