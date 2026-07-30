@@ -104,43 +104,43 @@ function BodyFrame() {
   return (
     <g aria-hidden="true">
       <rect width="300" height="610" rx="28" className="fill-slate-100" />
-      <circle cx="150" cy="42" r="30" className="fill-slate-300 stroke-slate-400" />
       <path
-        d="M118 101 C122 86 178 86 182 101 L207 320 C209 350 188 374 150 374 C112 374 91 350 93 320 Z"
+        d="M122 45 C122 22 178 22 178 45 C178 69 165 83 150 83 C135 83 122 69 122 45 Z"
+        className="fill-slate-300 stroke-slate-400"
+      />
+      <path
+        d="M96 126 C108 92 130 91 150 102 C170 91 192 92 204 126 L218 276 C222 327 196 367 150 367 C104 367 78 327 82 276 Z"
         className="fill-slate-200 stroke-slate-400"
       />
-      <line
-        x1="150"
-        y1="102"
-        x2="150"
-        y2="334"
-        className="stroke-slate-300"
-        strokeWidth="4"
-        strokeLinecap="round"
-      />
       <path
-        d="M88 124 C59 154 49 225 51 324"
+        d="M150 104 C146 148 146 217 150 333"
         className="fill-none stroke-slate-300"
         strokeLinecap="round"
-        strokeWidth="22"
+        strokeWidth="3"
       />
       <path
-        d="M212 124 C241 154 251 225 249 324"
+        d="M89 132 C58 163 43 232 50 326"
         className="fill-none stroke-slate-300"
         strokeLinecap="round"
-        strokeWidth="22"
+        strokeWidth="24"
       />
       <path
-        d="M122 367 C106 426 100 500 105 590"
+        d="M211 132 C242 163 257 232 250 326"
         className="fill-none stroke-slate-300"
         strokeLinecap="round"
-        strokeWidth="26"
+        strokeWidth="24"
       />
       <path
-        d="M178 367 C194 426 200 500 195 590"
+        d="M121 360 C103 430 99 514 106 590"
         className="fill-none stroke-slate-300"
         strokeLinecap="round"
-        strokeWidth="26"
+        strokeWidth="28"
+      />
+      <path
+        d="M179 360 C197 430 201 514 194 590"
+        className="fill-none stroke-slate-300"
+        strokeLinecap="round"
+        strokeWidth="28"
       />
     </g>
   );
@@ -197,9 +197,7 @@ function AnatomySvg({
                 onBlur={() => onHoverRegion(null)}
                 onMouseEnter={() => onHoverRegion(region.id)}
               >
-                <title>
-                  {region.label}: {getSorenessLabel(soreness)}
-                </title>
+                <title>{`${region.label}: ${getSorenessLabel(soreness)}`}</title>
               </path>
             );
           })}
@@ -210,7 +208,7 @@ function AnatomySvg({
 }
 
 export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
-  const [selectedRegionId, setSelectedRegionId] = useState("front-left-pec");
+  const [selectedRegionId, setSelectedRegionId] = useState("chest-lower-left");
   const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
   const recentWorkouts = useMemo(() => getRecentWorkouts(workouts, 14), [workouts]);
   const sorenessValues = useMemo(
@@ -258,7 +256,7 @@ export function SorenessHeatmap({ workouts }: { workouts: Workout[] }) {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <div className="grid gap-5">
         <div className="grid gap-3 sm:grid-cols-2">
           {(["front", "back"] as const).map((side) => (
             <AnatomySvg
