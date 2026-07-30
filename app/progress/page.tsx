@@ -970,47 +970,6 @@ function buildWorkoutCalendar(workouts: Workout[], programs: TrainingProgram[]) 
   };
 }
 
-function buildActivityGrid(workouts: Workout[], programs: TrainingProgram[]) {
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const start = new Date(today);
-  start.setDate(today.getDate() - 83);
-  const plannedWeekdays = getEstimatedPlannedWeekdays(programs);
-  const prDateKeys = buildPrDateKeys(workouts);
-  const workoutsByDate = new Map<string, Workout[]>();
-
-  workouts.forEach((workout) => {
-    const dateKey = getDateKey(new Date(getWorkoutTime(workout)));
-    workoutsByDate.set(dateKey, [...(workoutsByDate.get(dateKey) ?? []), workout]);
-  });
-
-  return Array.from({ length: 84 }, (_item, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    const dateKey = getDateKey(date);
-    const dayWorkouts = workoutsByDate.get(dateKey) ?? [];
-    const isPlanned = plannedWeekdays.has(date.getDay());
-    const hasPr = prDateKeys.has(dateKey);
-    const status =
-      dayWorkouts.length > 0
-        ? "completed"
-        : isPlanned
-          ? "skipped"
-          : "recovery";
-
-    return {
-      dateKey,
-      label: date.toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      }),
-      count: dayWorkouts.length,
-      status,
-      hasPr,
-    };
-  });
-}
-
 function getCalendarDayClasses(day: WorkoutCalendarDay) {
   if (day.status === "completed" && day.hasPr) {
     return "border-green-400/50 bg-green-500/20 shadow-[0_0_22px_rgba(34,197,94,0.18)]";
@@ -1029,22 +988,6 @@ function getCalendarDayClasses(day: WorkoutCalendarDay) {
   }
 
   return "border-gray-800 bg-gray-950/60 opacity-70";
-}
-
-function getActivityGridClasses(status: string, hasPr: boolean, count: number) {
-  if (hasPr) {
-    return "bg-green-400";
-  }
-
-  if (status === "completed") {
-    return count > 1 ? "bg-blue-400" : "bg-blue-600";
-  }
-
-  if (status === "skipped") {
-    return "bg-yellow-500";
-  }
-
-  return "bg-gray-800";
 }
 
 function getVolumeStatus(sets: number) {
@@ -1237,7 +1180,6 @@ export default function ProgressPage() {
   const exerciseTrend = buildExerciseTrend(workouts, activeTrendExercise);
   const monthlyRecap = calculateMonthlyRecap(workouts);
   const workoutCalendar = buildWorkoutCalendar(workouts, programs);
-  const activityGrid = buildActivityGrid(workouts, programs);
   const advancedProgress = calculateAdvancedProgress(workouts);
   const highestTrendEstimate = Math.max(
     ...exerciseTrend.map((trendPoint) => trendPoint.estimatedOneRepMax),
@@ -1719,39 +1661,6 @@ export default function ProgressPage() {
                       />
                     )
                   )}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm text-gray-400">12-Week Activity Grid</p>
-                    <h3 className="text-xl font-semibold">
-                      Workout density and missed planned days
-                    </h3>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Dark squares are recovery/unplanned days.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-12 gap-2">
-                  {activityGrid.map((day) => (
-                    <div
-                      key={day.dateKey}
-                      className={
-                        "aspect-square rounded-sm " +
-                        getActivityGridClasses(day.status, day.hasPr, day.count)
-                      }
-                      title={`${day.label}: ${
-                        day.count
-                          ? `${day.count} workout(s)`
-                          : day.status === "skipped"
-                            ? "skipped planned day"
-                            : "recovery day"
-                      }`}
-                    />
-                  ))}
                 </div>
               </div>
             </div>
