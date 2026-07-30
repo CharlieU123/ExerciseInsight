@@ -90,6 +90,7 @@ type ActiveWorkoutDraft = {
   currentExercises: ExerciseEntry[];
   completedSetIds: Record<string, boolean>;
   activeStartedAt: number;
+  isActiveTimerRunning: boolean;
 };
 
 type CompletedWorkoutSummary = {
@@ -539,7 +540,7 @@ function buildCompletedWorkoutSummary(
 ): CompletedWorkoutSummary {
   const summaryWithoutShareText = {
     title: getWorkoutTitle(savedWorkout),
-    durationMinutes: Math.max(1, Math.round(durationSeconds / 60)),
+    durationMinutes: Math.max(0, Math.round(durationSeconds / 60)),
     workingSets: getWorkoutWorkingSets(savedWorkout),
     volume: getWorkoutVolume(savedWorkout),
     averageRir: getWorkoutAverageRir(savedWorkout),
@@ -589,6 +590,7 @@ export default function AddWorkoutPage() {
   const [completedSetIds, setCompletedSetIds] = useState<Record<string, boolean>>({});
   const [activeStartedAt, setActiveStartedAt] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isActiveTimerRunning, setIsActiveTimerRunning] = useState(false);
   const [restSeconds, setRestSeconds] = useState(defaultRestSeconds);
   const [restRemainingSeconds, setRestRemainingSeconds] =
     useState(defaultRestSeconds);
@@ -663,6 +665,10 @@ export default function AddWorkoutPage() {
       if (typeof parsedDraft.activeStartedAt === "number") {
         setActiveStartedAt(parsedDraft.activeStartedAt);
       }
+
+      if (typeof parsedDraft.isActiveTimerRunning === "boolean") {
+        setIsActiveTimerRunning(parsedDraft.isActiveTimerRunning);
+      }
     } catch {
       localStorage.removeItem(activeWorkoutDraftKey);
     }
@@ -677,12 +683,16 @@ export default function AddWorkoutPage() {
   }, [hasLoadedSavedData, userId, workouts]);
 
   useEffect(() => {
+    if (!isActiveTimerRunning) {
+      return;
+    }
+
     const timer = window.setInterval(() => {
       setElapsedSeconds(Math.max(0, Math.floor((Date.now() - activeStartedAt) / 1000)));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [activeStartedAt]);
+  }, [activeStartedAt, isActiveTimerRunning]);
 
   useEffect(() => {
     if (!isRestTimerRunning) {
@@ -711,6 +721,7 @@ export default function AddWorkoutPage() {
       currentExercises,
       completedSetIds,
       activeStartedAt,
+      isActiveTimerRunning,
     };
 
     localStorage.setItem(activeWorkoutDraftKey, JSON.stringify(draft));
@@ -719,6 +730,7 @@ export default function AddWorkoutPage() {
     completedSetIds,
     currentExercises,
     feeling,
+    isActiveTimerRunning,
     notes,
     workoutDate,
   ]);
@@ -813,6 +825,12 @@ export default function AddWorkoutPage() {
 
       setCurrentExercises(programExercises);
       setSelectedTemplate("");
+      setCompletedSetIds({});
+      setActiveStartedAt(Date.now());
+      setElapsedSeconds(0);
+      setIsActiveTimerRunning(false);
+      setRestRemainingSeconds(restSeconds);
+      setIsRestTimerRunning(false);
       setNotes(
         [
           "Started from " + program.name + " - " + selectedDay.name + ".",
@@ -831,7 +849,7 @@ export default function AddWorkoutPage() {
     }
 
     loadProgramWorkoutDraft();
-  }, [hasLoadedSavedData, loadedProgramId, userId]);
+  }, [hasLoadedSavedData, loadedProgramId, restSeconds, userId]);
 
   function resetExerciseForm() {
     setSelectedLibraryExercise("");
@@ -1124,6 +1142,22 @@ export default function AddWorkoutPage() {
     }
   }
 
+  function startOrPauseActiveTimer() {
+    if (isActiveTimerRunning) {
+      setIsActiveTimerRunning(false);
+      return;
+    }
+
+    setActiveStartedAt(Date.now() - elapsedSeconds * 1000);
+    setIsActiveTimerRunning(true);
+  }
+
+  function resetElapsedTimer() {
+    setIsActiveTimerRunning(false);
+    setActiveStartedAt(Date.now());
+    setElapsedSeconds(0);
+  }
+
   function resetActiveWorkoutDraft() {
     const confirmed = window.confirm("Reset the active workout timer and completed sets?");
 
@@ -1132,8 +1166,7 @@ export default function AddWorkoutPage() {
     }
 
     setCompletedSetIds({});
-    setActiveStartedAt(Date.now());
-    setElapsedSeconds(0);
+    resetElapsedTimer();
     setRestRemainingSeconds(restSeconds);
     setIsRestTimerRunning(false);
     localStorage.removeItem(activeWorkoutDraftKey);
@@ -1310,7 +1343,7 @@ export default function AddWorkoutPage() {
 
     setCurrentExercises(templateExercises);
     setCompletedSetIds({});
-    setActiveStartedAt(Date.now());
+    resetElapsedTimer();
   }
 
   function clearCurrentWorkout() {
@@ -1325,8 +1358,7 @@ export default function AddWorkoutPage() {
     setCurrentExercises([]);
     setSelectedTemplate("");
     setCompletedSetIds({});
-    setActiveStartedAt(Date.now());
-    setElapsedSeconds(0);
+    resetElapsedTimer();
     setIsRestTimerRunning(false);
     localStorage.removeItem(activeWorkoutDraftKey);
     resetExerciseForm();
@@ -1338,10 +1370,12 @@ export default function AddWorkoutPage() {
     }
 
     const selectedDate = new Date(workoutDate + "T12:00:00");
-    const durationSeconds = Math.max(
-      60,
-      Math.floor((Date.now() - activeStartedAt) / 1000)
-    );
+    const durationSeconds = isActiveTimerRunning
+      ? Math.max(
+          elapsedSeconds,
+          Math.floor((Date.now() - activeStartedAt) / 1000)
+        )
+      : elapsedSeconds;
 
     const newWorkout: Workout = {
       id: Date.now(),
@@ -1374,8 +1408,7 @@ export default function AddWorkoutPage() {
     setShareMessage("");
     setCurrentExercises([]);
     setCompletedSetIds({});
-    setActiveStartedAt(Date.now());
-    setElapsedSeconds(0);
+    resetElapsedTimer();
     setRestRemainingSeconds(restSeconds);
     setIsRestTimerRunning(false);
     setWorkoutDate(getTodayInputDate());
@@ -1399,8 +1432,7 @@ export default function AddWorkoutPage() {
     setFeeling(completedWorkoutSummary.workout.feeling);
     setNotes(completedWorkoutSummary.workout.notes);
     setCompletedSetIds({});
-    setActiveStartedAt(Date.now());
-    setElapsedSeconds(0);
+    resetElapsedTimer();
     setRestRemainingSeconds(restSeconds);
     setIsRestTimerRunning(false);
     setCompletedWorkoutSummary(null);
@@ -2207,6 +2239,26 @@ export default function AddWorkoutPage() {
                 <p className="mt-1 text-3xl font-bold">
                   {formatElapsedTime(elapsedSeconds)}
                 </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={startOrPauseActiveTimer}
+                    className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold hover:bg-blue-500"
+                  >
+                    {isActiveTimerRunning
+                      ? "Pause"
+                      : elapsedSeconds > 0
+                        ? "Resume"
+                        : "Start"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetElapsedTimer}
+                    className="rounded-md bg-gray-800 px-3 py-2 text-sm font-semibold hover:bg-gray-700"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
 
               <div className="rounded-lg border border-green-500/20 bg-green-950/20 p-4">
