@@ -29,6 +29,21 @@ const savedDiscoverKey = "exerciseinsight-saved-discover-exercises";
 const discoverTabs = ["For You", "Exercises", "Programs", "Learn", "Saved"] as const;
 
 type DiscoverTab = (typeof discoverTabs)[number];
+type RecommendationState = {
+  label: "No data" | "Early Recommendation" | "Personalized Recommendation";
+  confidence: "Not ready" | "Low confidence" | "High confidence";
+  dataPeriod: string;
+  isPersonalized: boolean;
+};
+
+const starterExerciseNames = [
+  "Bench Press",
+  "Lat Pulldown",
+  "Goblet Squat",
+  "Romanian Deadlift",
+  "Dumbbell Shoulder Press",
+  "Seated Cable Row",
+];
 
 const goals = [
   {
@@ -206,6 +221,56 @@ function getRecentWorkouts(workouts: Workout[], days = 14) {
   });
 }
 
+function getWorkoutSpanDays(workouts: Workout[]) {
+  const workoutDates = workouts
+    .map((workout) => new Date(workout.dateISO || workout.date))
+    .filter((date) => !Number.isNaN(date.getTime()))
+    .sort((firstDate, secondDate) => firstDate.getTime() - secondDate.getTime());
+
+  if (workoutDates.length < 2) {
+    return workoutDates.length === 1 ? 1 : 0;
+  }
+
+  const firstDate = workoutDates[0];
+  const lastDate = workoutDates[workoutDates.length - 1];
+  const millisecondsPerDay = 1000 * 60 * 60 * 24;
+
+  return Math.max(
+    1,
+    Math.round((lastDate.getTime() - firstDate.getTime()) / millisecondsPerDay)
+  );
+}
+
+function getRecommendationState(workouts: Workout[]): RecommendationState {
+  const completedWorkoutCount = workouts.length;
+  const spanDays = getWorkoutSpanDays(workouts);
+
+  if (completedWorkoutCount < 2) {
+    return {
+      label: "No data",
+      confidence: "Not ready",
+      dataPeriod: "Personalized recommendations need at least 2 logged workouts.",
+      isPersonalized: false,
+    };
+  }
+
+  if (completedWorkoutCount < 8) {
+    return {
+      label: "Early Recommendation",
+      confidence: "Low confidence",
+      dataPeriod: `Based on ${completedWorkoutCount} workouts over ${spanDays} days`,
+      isPersonalized: true,
+    };
+  }
+
+  return {
+    label: "Personalized Recommendation",
+    confidence: "High confidence",
+    dataPeriod: `Based on ${completedWorkoutCount} workouts over ${spanDays} days`,
+    isPersonalized: true,
+  };
+}
+
 function getExerciseClassification(exercise: ExerciseLibraryItem) {
   const text = getExerciseText(exercise);
 
@@ -302,7 +367,7 @@ function getLowVolumeMuscle(workouts: Workout[]) {
   const trainedMuscles = muscleGroups.filter((muscle) => muscle !== "Other");
 
   if (Object.keys(totals).length === 0) {
-    return "Back";
+    return null;
   }
 
   return trainedMuscles.reduce((lowestMuscle, muscle) =>
@@ -330,8 +395,28 @@ function getMuscleVolumeStatus(setCount: number) {
   return "Balanced";
 }
 
-function getRecommendationReason(exercise: ExerciseLibraryItem, lowVolumeMuscle: string) {
+function getRecommendationReason(
+  exercise: ExerciseLibraryItem,
+  lowVolumeMuscle: string | null,
+  isPersonalized: boolean
+) {
   const exerciseName = exercise.exercise.toLowerCase();
+
+  if (!isPersonalized) {
+    if (exerciseName.includes("bench")) {
+      return "A simple press pattern that teaches stable upper-body progression.";
+    }
+
+    if (exerciseName.includes("pulldown")) {
+      return "A stable vertical pull that makes lat volume easy to track.";
+    }
+
+    if (exerciseName.includes("goblet")) {
+      return "A beginner-friendly squat pattern that is easy to load and control.";
+    }
+
+    return "A reliable starter movement that fits many beginner programs.";
+  }
 
   if (exerciseName.includes("hip thrust")) {
     return "Best for directly loading the glutes through progressive overload.";
@@ -349,11 +434,23 @@ function getRecommendationReason(exercise: ExerciseLibraryItem, lowVolumeMuscle:
     return "Keeps the torso stable so the upper back can do more of the work.";
   }
 
+  if (exerciseName.includes("lat pulldown")) {
+    return "A stable vertical pull that makes lat volume easy to track.";
+  }
+
+  if (exerciseName.includes("barbell row")) {
+    return "Adds heavier horizontal pulling for mid-back strength.";
+  }
+
+  if (exerciseName.includes("pull-up")) {
+    return "A bodyweight vertical pull that also tracks relative strength.";
+  }
+
   if (exerciseName.includes("incline")) {
     return "Useful when upper-chest volume needs a direct, trackable movement.";
   }
 
-  if (exercise.muscleGroup === lowVolumeMuscle) {
+  if (lowVolumeMuscle && exercise.muscleGroup === lowVolumeMuscle) {
     return `${lowVolumeMuscle} is your lowest-volume muscle group in the current analysis window.`;
   }
 
@@ -370,6 +467,7 @@ function getRecommendationReason(exercise: ExerciseLibraryItem, lowVolumeMuscle:
 
 function getTodayInsight(workouts: Workout[], goalsData: FitnessGoal[], programs: TrainingProgram[]) {
   const lowVolumeMuscle = getLowVolumeMuscle(workouts);
+  const recommendationState = getRecommendationState(workouts);
   const activeGoal = goalsData.find((goal) => goal.status === "Active") ?? goalsData[0];
   const currentProgram = programs[0];
   const supportingContext = activeGoal
@@ -378,10 +476,10 @@ function getTodayInsight(workouts: Workout[], goalsData: FitnessGoal[], programs
       ? `Supporting your program: ${currentProgram.name}`
       : "Based on your recent training";
 
-  if (workouts.length === 0) {
+  if (!recommendationState.isPersonalized || !lowVolumeMuscle) {
     return {
       title: "Start with useful data",
-      context: "Based on your last 14 days",
+      context: recommendationState.dataPeriod,
       detail:
         "Log one full workout with sets, reps, RIR, pump, and soreness. Discover will turn that into smarter exercise and split recommendations.",
     };
@@ -465,6 +563,10 @@ export default function DiscoverPage() {
     []
   );
   const lowVolumeMuscle = useMemo(() => getLowVolumeMuscle(workouts), [workouts]);
+  const recommendationState = useMemo(
+    () => getRecommendationState(workouts),
+    [workouts]
+  );
   const todayInsight = useMemo(
     () => getTodayInsight(workouts, goalsData, programs),
     [goalsData, programs, workouts]
@@ -533,12 +635,25 @@ export default function DiscoverPage() {
   );
 
   const recommendedExercises = useMemo(
-    () =>
-      exerciseLibrary
+    () => {
+      if (!recommendationState.isPersonalized || !lowVolumeMuscle) {
+        const starterExercises = starterExerciseNames
+          .map((exerciseName) =>
+            exerciseLibrary.find((exercise) => exercise.exercise === exerciseName)
+          )
+          .filter((exercise): exercise is ExerciseLibraryItem => Boolean(exercise));
+
+        return starterExercises.length > 0
+          ? starterExercises.slice(0, 3)
+          : exerciseLibrary.slice(0, 3);
+      }
+
+      return exerciseLibrary
         .filter((exercise) => exercise.muscleGroup === lowVolumeMuscle)
         .filter((exercise) => matchesGoal(exercise, selectedGoal))
-        .slice(0, 3),
-    [lowVolumeMuscle, selectedGoal]
+        .slice(0, 3);
+    },
+    [lowVolumeMuscle, recommendationState.isPersonalized, selectedGoal]
   );
   const visibleExercises =
     activeTab === "Exercises" ? filteredExercises : filteredExercises.slice(0, 6);
@@ -725,11 +840,35 @@ export default function DiscoverPage() {
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-wide text-cyan-300">
-                    Recommended For You
+                    {recommendationState.label}
                   </p>
-                  <h2 className="text-2xl font-bold">Based on recent training</h2>
+                  <h2 className="text-2xl font-bold">
+                    {recommendationState.isPersonalized
+                      ? "Recommended For You"
+                      : "Popular Starter Exercises"}
+                  </h2>
                 </div>
-                <p className="text-sm text-gray-400">Low-volume focus: {lowVolumeMuscle}</p>
+                <div className="text-left sm:text-right">
+                  <p className="text-sm font-semibold text-cyan-200">
+                    {recommendationState.confidence}
+                  </p>
+                  <p className="text-sm text-gray-400">
+                    {recommendationState.isPersonalized && lowVolumeMuscle
+                      ? `Low-volume focus: ${lowVolumeMuscle}`
+                      : "No training pattern detected yet"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-4 rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4">
+                <p className="text-sm font-semibold text-cyan-100">
+                  {recommendationState.dataPeriod}
+                </p>
+                <p className="mt-2 text-sm text-gray-300">
+                  {recommendationState.isPersonalized && lowVolumeMuscle
+                    ? `${lowVolumeMuscle} appears lower than your other recent muscle groups. These picks are meant to add useful volume without changing your entire plan.`
+                    : "Personalized recommendations are not ready yet. Log at least two complete workouts with muscle groups, sets, reps, and RIR."}
+                </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
@@ -743,7 +882,16 @@ export default function DiscoverPage() {
                     </p>
                     <h3 className="mt-2 text-lg font-semibold">{exercise.exercise}</h3>
                     <p className="mt-2 text-sm text-gray-400">
-                      {getRecommendationReason(exercise, lowVolumeMuscle)}
+                      {getRecommendationReason(
+                        exercise,
+                        lowVolumeMuscle,
+                        recommendationState.isPersonalized
+                      )}
+                    </p>
+                    <p className="mt-3 rounded-md bg-white/5 px-3 py-2 text-xs text-gray-400">
+                      Purpose: {recommendationState.isPersonalized
+                        ? "address the observed training gap"
+                        : "help you build enough workout history for better insights"}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
