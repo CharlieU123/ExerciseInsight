@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { CollapsibleSection } from "../components/CollapsibleSection";
 import { EmptyState } from "../components/EmptyState";
+import { ExerciseDetailModal } from "../components/ExerciseDetailModal";
 import {
   exerciseLibrary,
   muscleGroups,
@@ -39,6 +40,8 @@ export default function ExerciseLibraryPage() {
   const [newDefaultReps, setNewDefaultReps] = useState("8-12");
   const [newCues, setNewCues] = useState("");
   const [newSubstitutions, setNewSubstitutions] = useState("");
+  const [selectedExerciseDetail, setSelectedExerciseDetail] =
+    useState<ExerciseLibraryItem | null>(null);
 
   useEffect(() => {
     async function loadLibrary() {
@@ -437,7 +440,16 @@ export default function ExerciseLibraryPage() {
           {visibleExercises.map((libraryExercise) => (
             <article
               key={libraryExercise.exercise}
-              className="rounded-lg border border-gray-800 bg-gray-900 p-5 shadow-xl shadow-black/10"
+              role="button"
+              tabIndex={0}
+              onClick={() => setSelectedExerciseDetail(libraryExercise)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedExerciseDetail(libraryExercise);
+                }
+              }}
+              className="cursor-pointer rounded-lg border border-gray-800 bg-gray-900 p-5 shadow-xl shadow-black/10 transition hover:-translate-y-0.5 hover:border-cyan-400/40 hover:shadow-cyan-950/20"
             >
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
@@ -463,7 +475,10 @@ export default function ExerciseLibraryPage() {
                 <div className="flex flex-col gap-2">
                   <button
                     type="button"
-                    onClick={() => copyExerciseName(libraryExercise.exercise)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      copyExerciseName(libraryExercise.exercise);
+                    }}
                     className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold hover:bg-blue-500"
                   >
                     {copiedExercise === libraryExercise.exercise ? "Copied" : "Copy Name"}
@@ -471,7 +486,10 @@ export default function ExerciseLibraryPage() {
 
                   <button
                     type="button"
-                    onClick={() => addExerciseToWorkout(libraryExercise.exercise)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      addExerciseToWorkout(libraryExercise.exercise);
+                    }}
                     className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold hover:bg-green-500"
                   >
                     Add to Workout
@@ -553,6 +571,12 @@ export default function ExerciseLibraryPage() {
           </Link>
         </div>
       </section>
+
+      <ExerciseDetailModal
+        exercise={selectedExerciseDetail}
+        onAddToWorkout={addExerciseToWorkout}
+        onClose={() => setSelectedExerciseDetail(null)}
+      />
     </main>
   );
 }
