@@ -1527,7 +1527,7 @@ export default function AddWorkoutPage() {
 
   return (
     <main className="min-h-screen p-4 sm:p-6">
-      <section className="mx-auto max-w-6xl">
+      <section className="mx-auto max-w-7xl">
         <div className="mb-8">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-400">
             Add Workout
@@ -1643,8 +1643,8 @@ export default function AddWorkoutPage() {
           </section>
         )}
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
-          <div className="space-y-6">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.25fr)]">
+          <div className="min-w-0 space-y-6">
             <CollapsibleSection
               title="Workout Template (optional)"
               description="Pick a split to quickly load starter exercises."
@@ -2227,11 +2227,12 @@ export default function AddWorkoutPage() {
             </CollapsibleSection>
           </div>
 
-          <CollapsibleSection
-            title="Active Workout"
-            description="Use this screen during the workout. Changes autosave on this device."
-          >
-            <div className="mb-5 grid gap-3 sm:grid-cols-3">
+          <div className="min-w-0">
+            <CollapsibleSection
+              title="Active Workout"
+              description="Use this screen during the workout. Changes autosave on this device."
+            >
+            <div className="mb-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-lg border border-blue-500/20 bg-blue-950/20 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-200">
                   Elapsed
@@ -2466,8 +2467,8 @@ export default function AddWorkoutPage() {
                       </div>
                     )}
 
-                    <div className="overflow-x-auto">
-                      <div className="min-w-[760px]">
+                    <div className="max-w-full overflow-x-auto">
+                      <div className="min-w-[680px]">
                         <div className="grid grid-cols-[4rem_7rem_1fr_1fr_1fr_5rem_5rem_5rem] gap-2 border-b border-gray-800 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                           <p>Set</p>
                           <p>Previous</p>
@@ -2629,7 +2630,8 @@ export default function AddWorkoutPage() {
                 ))}
               </div>
             )}
-          </CollapsibleSection>
+            </CollapsibleSection>
+          </div>
         </div>
       </section>
     </main>
