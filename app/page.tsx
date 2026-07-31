@@ -13,6 +13,7 @@ import {
   loadProfile,
   loadTrainingPrograms,
   loadWorkouts,
+  isWorkoutThisWeek,
   saveFitnessGoals,
   saveProfile,
   saveTrainingPrograms,
@@ -104,6 +105,7 @@ export default function HomePage() {
     weight: "",
   });
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [todayLabel, setTodayLabel] = useState("");
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -158,6 +160,13 @@ export default function HomePage() {
 
   useEffect(() => {
     setIsDemoMode(localStorage.getItem("exerciseinsight-demo-mode") === "true");
+    setTodayLabel(
+      new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      }).format(new Date())
+    );
   }, []);
 
   function loadDemoDashboard() {
@@ -219,60 +228,172 @@ export default function HomePage() {
   );
   const isNewUser =
     workouts.length === 0 && goals.length === 0 && programs.length === 0;
+  const weeklyWorkouts = workouts.filter(isWorkoutThisWeek).length;
+  const weeklyTarget = Math.max(Number(currentProgram?.daysPerWeek) || 4, 1);
+  const weeklyProgressPercent = Math.min(
+    Math.round((weeklyWorkouts / weeklyTarget) * 100),
+    100
+  );
+  const readinessStatus =
+    smartCoachInsight.recoveryScore >= 80
+      ? "Ready to train"
+      : smartCoachInsight.recoveryScore >= 60
+        ? "Train, but monitor fatigue"
+        : "Back off today";
+  const recentAchievement = lastExercise
+    ? `${lastExercise.exercise} logged in your latest session`
+    : "Log a workout to unlock achievements";
 
   return (
     <main className="min-h-screen p-4 sm:p-6 lg:p-10">
-      <section className="mx-auto max-w-4xl">
+      <section className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-lg font-semibold text-gray-400">Good training starts here,</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+              Today
+            </p>
             <h1 className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">
-              {profile.name ? profile.name : "ExerciseInsight"}
+              Good training starts here{profile.name ? `, ${profile.name}` : ""}
             </h1>
+            <p className="mt-3 text-gray-400">{todayLabel || "Today"}</p>
           </div>
           <div className="hidden h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 to-violet-500 text-base font-bold text-gray-950 shadow-lg shadow-cyan-950/30 sm:flex">
             {profile.name ? profile.name.slice(0, 2).toUpperCase() : "EI"}
           </div>
         </div>
 
-        <div className="mb-8 rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-8">
-          <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="mb-2 text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
-                Dashboard
+        <div className="mb-8 grid gap-5 lg:grid-cols-[1.4fr_0.8fr]">
+          <div className="rounded-3xl border border-cyan-400/20 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-7">
+            {isNewUser ? (
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                  Build Your First Training Plan
+                </p>
+                <h2 className="mt-3 text-3xl font-bold">
+                  Goal / Schedule / Equipment / Program
+                </h2>
+                <p className="mt-3 max-w-2xl text-gray-300">
+                  Create a simple plan first. Once you have training data,
+                  Today will switch into your daily coaching view.
+                </p>
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href="/programs"
+                    className="rounded-2xl bg-blue-600 px-5 py-4 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
+                  >
+                    Build Program
+                  </Link>
+                  <Link
+                    href="/add-workout"
+                    className="rounded-2xl bg-white/10 px-5 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
+                  >
+                    Log First Workout
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full flex-col justify-between gap-6">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                    Today's Workout
+                  </p>
+                  <h2 className="mt-3 text-4xl font-bold">
+                    {todaysProgramDay?.name ?? "Add Workout"}
+                  </h2>
+                  <p className="mt-3 text-gray-300">
+                    {todaysProgramDay
+                      ? todaysProgramDay.isRestDay
+                        ? "Rest day scheduled"
+                        : `${todaysProgramDay.exercises.length} exercises · About ${todaysWorkoutEstimate} minutes`
+                      : "No program day loaded yet. Start a manual workout or build a plan."}
+                  </p>
+                  {currentProgram && (
+                    <p className="mt-2 text-sm text-gray-400">
+                      From {currentProgram.name}
+                    </p>
+                  )}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Link
+                    href={todaysWorkoutHref}
+                    className="rounded-2xl bg-blue-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
+                  >
+                    Start Workout
+                  </Link>
+                  <Link
+                    href="/train"
+                    className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
+                  >
+                    Preview
+                  </Link>
+                  <Link
+                    href="/progress"
+                    className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
+                  >
+                    Review Progress
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-5">
+            <div className="rounded-3xl border border-green-400/20 bg-green-950/20 p-5 shadow-xl shadow-green-950/10 sm:p-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-green-300">
+                Readiness
               </p>
-              <h2 className="max-w-3xl text-2xl font-bold sm:text-3xl">
-                Train smarter with your current program, recovery, and recent feedback.
-              </h2>
+              <div className="mt-4 flex items-center gap-5">
+                <RecoveryRing score={smartCoachInsight.recoveryScore} />
+                <div>
+                  <p className="text-2xl font-bold">{readinessStatus}</p>
+                  <p className="mt-2 text-sm text-gray-400">
+                    {smartCoachInsight.recoveryLabel} · Confidence{" "}
+                    {smartCoachInsight.confidence}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-amber-400/20 bg-amber-950/10 p-5 shadow-xl shadow-amber-950/10 sm:p-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-300">
+                Today's Adjustment
+              </p>
+              <h2 className="mt-3 text-2xl font-bold">{deloadRecommendation.action}</h2>
+              <p className="mt-2 text-sm text-gray-300">
+                {deloadRecommendation.detail}
+              </p>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Link
-              href="/add-workout"
-              className="rounded-2xl bg-blue-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-blue-950/30 hover:bg-blue-500"
-            >
-              Add Workout
-            </Link>
-            {currentProgram && (
-              <Link
-                href={todaysWorkoutHref}
-                className="rounded-2xl bg-green-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
-              >
-                Start Current Program
-              </Link>
-            )}
-            <Link
-              href="/progress"
-              className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
-            >
-              View Progress
-            </Link>
-            <Link
-              href="/programs"
-              className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
-            >
-              Manage Program
-            </Link>
+        </div>
+
+        <div className="mb-8 grid gap-5 md:grid-cols-2">
+          <div className="rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+              Weekly Progress
+            </p>
+            <h2 className="mt-3 text-3xl font-bold">
+              {weeklyWorkouts} of {weeklyTarget} workouts completed
+            </h2>
+            <div className="mt-5 h-3 rounded-full bg-gray-950">
+              <div
+                className="h-3 rounded-full bg-cyan-400"
+                style={{ width: `${weeklyProgressPercent}%` }}
+              />
+            </div>
+            <p className="mt-3 text-sm text-gray-400">
+              {weeklyProgressPercent}% of this week's training target.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+              Recent Achievement
+            </p>
+            <h2 className="mt-3 text-3xl font-bold">{recentAchievement}</h2>
+            <p className="mt-3 text-sm text-gray-400">
+              ExerciseInsight will use this history to improve future workout
+              targets and coaching recommendations.
+            </p>
           </div>
         </div>
 
@@ -281,18 +402,13 @@ export default function HomePage() {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-green-300">
-                  Today's Workout
+                  Program Preview
                 </p>
                 <h2 className="mt-2 text-3xl font-bold">{todaysProgramDay.name}</h2>
                 <p className="mt-2 text-gray-300">
                   {todaysProgramDay.isRestDay
                     ? "Rest day"
                     : `${todaysProgramDay.exercises.length} exercises · Approximately ${todaysWorkoutEstimate} minutes`}
-                </p>
-                <p className="mt-2 text-sm text-gray-400">
-                  Starts from {currentProgram.name}. ExerciseInsight will load
-                  this exact program day, rep targets, previous weights, and the
-                  active-workout rest timer.
                 </p>
               </div>
 

@@ -37,9 +37,11 @@ export default function SettingsPage() {
       <section className="mx-auto max-w-4xl">
         <div className="mb-8">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-400">
-            Settings
+            Profile
           </p>
-          <h1 className="mb-3 text-3xl font-bold sm:text-4xl">App Settings</h1>
+          <h1 className="mb-3 text-3xl font-bold sm:text-4xl">
+            Profile & Preferences
+          </h1>
           <p className="max-w-2xl text-gray-300">
             Manage your profile, account, theme, and app appearance from one place.
           </p>

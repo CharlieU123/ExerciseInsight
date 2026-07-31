@@ -5,16 +5,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "Home", icon: "H" },
-  { href: "/add-workout", label: "Log", icon: "+" },
-  { href: "/discover", label: "Find", icon: "D" },
-  { href: "/programs", label: "Programs", icon: "P" },
+  { href: "/", label: "Today", icon: "T" },
+  { href: "/train", label: "Train", icon: "+" },
+  { href: "/discover", label: "Discover", icon: "D" },
   { href: "/progress", label: "Progress", icon: "/" },
-  { href: "/settings", label: "Settings", icon: "S" },
+  { href: "/settings", label: "Profile", icon: "P" },
 ];
 
 export function NavBar() {
   const pathname = usePathname();
+
+  function isActiveLink(href: string) {
+    if (href === "/train") {
+      return ["/train", "/add-workout", "/programs", "/history", "/library"].some(
+        (path) => pathname === path || pathname.startsWith(`${path}/`)
+      );
+    }
+
+    if (href === "/settings") {
+      return ["/settings", "/profile", "/auth"].some(
+        (path) => pathname === path || pathname.startsWith(`${path}/`)
+      );
+    }
+
+    return pathname === href;
+  }
 
   return (
     <>
@@ -43,7 +58,7 @@ export function NavBar() {
 
         <nav className="flex flex-1 flex-col gap-2 px-4 py-8">
           {links.map((link) => {
-            const isActive = pathname === link.href;
+            const isActive = isActiveLink(link.href);
 
             return (
               <Link
@@ -104,9 +119,9 @@ export function NavBar() {
       </header>
 
       <nav className="app-bottom-tabs fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-gray-950/90 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 text-white shadow-[0_-18px_44px_rgba(0,0,0,0.32)] backdrop-blur-xl lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-6 gap-1">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {links.map((link) => {
-            const isActive = pathname === link.href;
+            const isActive = isActiveLink(link.href);
 
             return (
               <Link
