@@ -24,7 +24,10 @@ export function CollapsibleSection({
               <p className="mt-1 text-sm text-gray-400">{description}</p>
             )}
           </div>
-          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white/10 text-lg font-bold text-gray-300 transition-transform duration-300 group-open:rotate-90">
+          <span
+            aria-hidden="true"
+            className="flex h-8 w-8 items-center justify-center rounded-md bg-white/10 text-lg font-bold text-gray-300 transition-transform duration-300 group-open:rotate-90"
+          >
             &gt;
           </span>
         </div>

@@ -36,6 +36,7 @@ export function NavBar() {
       <aside className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-72 flex-col border-r border-white/10 bg-gray-950/90 text-white backdrop-blur-xl lg:flex">
         <Link
           href="/"
+          aria-label="ExerciseInsight Today"
           className="flex items-center gap-3 border-b border-white/10 px-6 py-7"
         >
           <Image
@@ -64,18 +65,25 @@ export function NavBar() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={isActive ? "page" : undefined}
                 className={
                   isActive
                     ? "group flex items-center gap-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 font-semibold text-cyan-300 shadow-lg shadow-cyan-950/20"
                     : "group flex items-center gap-4 rounded-2xl px-4 py-3 font-semibold text-gray-500 hover:bg-white/5 hover:text-gray-100"
                 }
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg text-lg">
+                <span
+                  aria-hidden="true"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-lg"
+                >
                   {link.icon}
                 </span>
                 <span>{link.label}</span>
                 {isActive && (
-                  <span className="ml-auto h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]" />
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]"
+                  />
                 )}
               </Link>
             );
@@ -84,7 +92,10 @@ export function NavBar() {
 
         <div className="border-t border-white/10 px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 to-violet-500 text-sm font-bold text-gray-950">
+            <div
+              aria-hidden="true"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-cyan-300 to-violet-500 text-sm font-bold text-gray-950"
+            >
               EI
             </div>
             <div className="min-w-0">
@@ -97,7 +108,11 @@ export function NavBar() {
 
       <header className="app-mobile-header sticky top-0 z-20 border-b border-white/10 bg-gray-950/85 text-white backdrop-blur lg:hidden">
         <nav className="mx-auto flex max-w-6xl px-4 py-3 sm:px-6">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
+          <Link
+            href="/"
+            aria-label="ExerciseInsight Today"
+            className="flex min-w-0 items-center gap-3"
+          >
             <Image
               src="/exerciseinsight-mark.svg"
               alt=""
@@ -127,13 +142,16 @@ export function NavBar() {
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={isActive ? "page" : undefined}
                 className={
                   isActive
                     ? "flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl bg-cyan-400/10 px-2 py-2 text-center text-xs font-semibold text-cyan-300 shadow-[0_0_22px_rgba(34,211,238,0.12)]"
                     : "flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-center text-xs font-semibold text-gray-500 hover:bg-white/5 hover:text-gray-200"
                 }
               >
-                <span className="text-base leading-none">{link.icon}</span>
+                <span aria-hidden="true" className="text-base leading-none">
+                  {link.icon}
+                </span>
                 <span className="leading-none">{link.label}</span>
               </Link>
             );
