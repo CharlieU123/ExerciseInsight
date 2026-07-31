@@ -1689,7 +1689,7 @@ export default function AddWorkoutPage() {
                   Exercise Library{" "}
                   <span className="text-xs text-gray-500">(optional)</span>
                 </label>
-                <div className="mb-3 grid gap-3 md:grid-cols-[1fr_180px_180px]">
+                <div className="mb-3 grid gap-3">
                   <div>
                     <input
                       id="exercise-library-search"
@@ -1711,33 +1711,35 @@ export default function AddWorkoutPage() {
                     </datalist>
                   </div>
 
-                  <select
-                    aria-label="Filter library by muscle group"
-                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                    value={libraryMuscleFilter}
-                    onChange={(event) => setLibraryMuscleFilter(event.target.value)}
-                  >
-                    <option value={allLibraryMuscles}>All muscles</option>
-                    {muscleGroups.map((group) => (
-                      <option key={group} value={group}>
-                        {group}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <select
+                      aria-label="Filter library by muscle group"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={libraryMuscleFilter}
+                      onChange={(event) => setLibraryMuscleFilter(event.target.value)}
+                    >
+                      <option value={allLibraryMuscles}>All muscles</option>
+                      {muscleGroups.map((group) => (
+                        <option key={group} value={group}>
+                          {group}
+                        </option>
+                      ))}
+                    </select>
 
-                  <select
-                    aria-label="Filter library by movement"
-                    className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
-                    value={libraryMovementFilter}
-                    onChange={(event) => setLibraryMovementFilter(event.target.value)}
-                  >
-                    <option value={allLibraryMovements}>All movements</option>
-                    {libraryMovementOptions.map((movement) => (
-                      <option key={movement} value={movement}>
-                        {movement}
-                      </option>
-                    ))}
-                  </select>
+                    <select
+                      aria-label="Filter library by movement"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={libraryMovementFilter}
+                      onChange={(event) => setLibraryMovementFilter(event.target.value)}
+                    >
+                      <option value={allLibraryMovements}>All movements</option>
+                      {libraryMovementOptions.map((movement) => (
+                        <option key={movement} value={movement}>
+                          {movement}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {librarySearchTerm.trim() && filteredLibraryExercises.length > 0 && (
