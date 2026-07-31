@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { EmptyState } from "./components/EmptyState";
-import { SorenessHeatmap } from "./components/SorenessHeatmap";
 import {
   getDeloadRecommendation,
   getProgramDays,
@@ -106,6 +105,7 @@ export default function HomePage() {
   });
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [todayLabel, setTodayLabel] = useState("");
+  const [showCoachingDetails, setShowCoachingDetails] = useState(false);
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -226,14 +226,17 @@ export default function HomePage() {
   const todaysWorkoutEstimate = getWorkoutEstimateMinutes(
     todaysProgramDay?.exercises.length ?? 0
   );
-  const isNewUser =
-    workouts.length === 0 && goals.length === 0 && programs.length === 0;
+  const showOnboarding =
+    !profile.name || goals.length === 0 || programs.length === 0;
   const weeklyWorkouts = workouts.filter(isWorkoutThisWeek).length;
-  const weeklyTarget = Math.max(Number(currentProgram?.daysPerWeek) || 4, 1);
-  const weeklyProgressPercent = Math.min(
-    Math.round((weeklyWorkouts / weeklyTarget) * 100),
-    100
-  );
+  const weeklyTarget = currentProgram
+    ? Math.max(Number(currentProgram.daysPerWeek) || 1, 1)
+    : 0;
+  const weeklyProgressPercent =
+    weeklyTarget > 0
+      ? Math.min(Math.round((weeklyWorkouts / weeklyTarget) * 100), 100)
+      : 0;
+  const hasReadinessData = workouts.length >= 2;
   const readinessStatus =
     smartCoachInsight.recoveryScore >= 80
       ? "Ready to train"
@@ -264,7 +267,7 @@ export default function HomePage() {
 
         <div className="mb-8 grid gap-5 lg:grid-cols-[1.4fr_0.8fr]">
           <div className="rounded-3xl border border-cyan-400/20 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-7">
-            {isNewUser ? (
+            {showOnboarding ? (
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
                   Build Your First Training Plan
@@ -342,16 +345,41 @@ export default function HomePage() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-green-300">
                 Readiness
               </p>
-              <div className="mt-4 flex items-center gap-5">
-                <RecoveryRing score={smartCoachInsight.recoveryScore} />
-                <div>
-                  <p className="text-2xl font-bold">{readinessStatus}</p>
-                  <p className="mt-2 text-sm text-gray-400">
-                    {smartCoachInsight.recoveryLabel} · Confidence{" "}
-                    {smartCoachInsight.confidence}
-                  </p>
+              {hasReadinessData ? (
+                <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
+                  <RecoveryRing score={smartCoachInsight.recoveryScore} />
+                  <div>
+                    <p className="text-2xl font-bold">{readinessStatus}</p>
+                    <p className="mt-2 text-sm text-gray-400">
+                      {smartCoachInsight.recoveryLabel} · Confidence{" "}
+                      {smartCoachInsight.confidence}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowCoachingDetails((isOpen) => !isOpen)}
+                      className="mt-4 rounded-lg bg-white/10 px-4 py-3 text-sm font-semibold hover:bg-white/15"
+                    >
+                      {showCoachingDetails
+                        ? "Hide Coaching Details"
+                        : "View Coaching Details"}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4">
+                  <h2 className="text-2xl font-bold">Not enough data</h2>
+                  <p className="mt-2 max-w-md text-sm text-gray-300">
+                    Complete at least two workouts and include your recovery
+                    feedback to generate a readiness score.
+                  </p>
+                  <Link
+                    href="/add-workout"
+                    className="mt-4 inline-flex rounded-lg bg-white/10 px-4 py-3 text-sm font-semibold hover:bg-white/15"
+                  >
+                    Log a Workout
+                  </Link>
+                </div>
+              )}
             </div>
 
             <div className="rounded-3xl border border-amber-400/20 bg-amber-950/10 p-5 shadow-xl shadow-amber-950/10 sm:p-6">
@@ -366,23 +394,71 @@ export default function HomePage() {
           </div>
         </div>
 
+        {showCoachingDetails && hasReadinessData && (
+          <section className="mb-8 rounded-3xl border border-cyan-400/20 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-6">
+            <div className="grid gap-5 md:grid-cols-3">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                  Next Move
+                </p>
+                <p className="mt-3 text-sm text-gray-300">
+                  {smartCoachInsight.nextMove}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                  Training Focus
+                </p>
+                <p className="mt-3 text-sm text-gray-300">
+                  {smartCoachInsight.trainingFocus}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                  Program Guidance
+                </p>
+                <p className="mt-3 text-sm text-gray-300">
+                  {smartCoachInsight.programNote}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
         <div className="mb-8 grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-6">
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
               Weekly Progress
             </p>
-            <h2 className="mt-3 text-3xl font-bold">
-              {weeklyWorkouts} of {weeklyTarget} workouts completed
-            </h2>
-            <div className="mt-5 h-3 rounded-full bg-gray-950">
-              <div
-                className="h-3 rounded-full bg-cyan-400"
-                style={{ width: `${weeklyProgressPercent}%` }}
-              />
-            </div>
-            <p className="mt-3 text-sm text-gray-400">
-              {weeklyProgressPercent}% of this week's training target.
-            </p>
+            {currentProgram ? (
+              <>
+                <h2 className="mt-3 text-3xl font-bold">
+                  {weeklyWorkouts} of {weeklyTarget} workouts completed
+                </h2>
+                <div className="mt-5 h-3 rounded-full bg-gray-950">
+                  <div
+                    className="h-3 rounded-full bg-cyan-400"
+                    style={{ width: `${weeklyProgressPercent}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-sm text-gray-400">
+                  {weeklyProgressPercent}% of this week&apos;s plan.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-3 text-3xl font-bold">No weekly target yet</h2>
+                <p className="mt-3 text-sm text-gray-400">
+                  Choose your training days when building a program.
+                </p>
+                <Link
+                  href="/programs"
+                  className="mt-5 inline-flex rounded-lg bg-white/10 px-4 py-3 text-sm font-semibold hover:bg-white/15"
+                >
+                  Build Program
+                </Link>
+              </>
+            )}
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur sm:p-6">
@@ -396,56 +472,6 @@ export default function HomePage() {
             </p>
           </div>
         </div>
-
-        {currentProgram && todaysProgramDay && (
-          <div className="mb-8 rounded-3xl border border-green-400/30 bg-green-950/20 p-5 shadow-xl shadow-green-950/10 sm:p-6">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-green-300">
-                  Program Preview
-                </p>
-                <h2 className="mt-2 text-3xl font-bold">{todaysProgramDay.name}</h2>
-                <p className="mt-2 text-gray-300">
-                  {todaysProgramDay.isRestDay
-                    ? "Rest day"
-                    : `${todaysProgramDay.exercises.length} exercises · Approximately ${todaysWorkoutEstimate} minutes`}
-                </p>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-2 lg:w-72 lg:grid-cols-1">
-                <Link
-                  href={todaysWorkoutHref}
-                  className="rounded-2xl bg-green-600 px-4 py-4 text-center font-semibold text-white shadow-lg shadow-green-950/30 hover:bg-green-500"
-                >
-                  Start Workout
-                </Link>
-                <Link
-                  href="/programs"
-                  className="rounded-2xl bg-white/10 px-4 py-4 text-center font-semibold text-gray-100 hover:bg-white/15"
-                >
-                  Edit Program
-                </Link>
-              </div>
-            </div>
-
-            {!todaysProgramDay.isRestDay && todaysProgramDay.exercises.length > 0 && (
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {todaysProgramDay.exercises.slice(0, 4).map((programExercise) => (
-                  <div
-                    key={programExercise.id}
-                    className="rounded-lg border border-gray-800 bg-gray-950 p-3"
-                  >
-                    <p className="font-semibold">{programExercise.exercise}</p>
-                    <p className="text-sm text-gray-400">
-                      {programExercise.muscleGroup} · {programExercise.sets} x{" "}
-                      {programExercise.reps}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="mb-8 rounded-3xl border border-cyan-400/30 bg-cyan-950/20 p-5 shadow-xl shadow-cyan-950/10 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -486,118 +512,6 @@ export default function HomePage() {
               )}
             </div>
           </div>
-        </div>
-
-        {isNewUser && (
-          <div className="mb-8 rounded-lg border border-blue-500/30 bg-blue-950/30 p-5 shadow-xl shadow-black/10 sm:p-6">
-            <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-300">
-              Quick Start
-            </p>
-            <h2 className="text-2xl font-bold">Set up ExerciseInsight in 3 steps</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <Link
-                href="/profile"
-                className="rounded-lg border border-white/10 bg-gray-950 p-4 hover:bg-gray-900"
-              >
-                <p className="font-semibold">1. Add Profile</p>
-                <p className="mt-1 text-sm text-gray-400">
-                  Save name, age, height, and weight.
-                </p>
-              </Link>
-              <Link
-                href="/goals"
-                className="rounded-lg border border-white/10 bg-gray-950 p-4 hover:bg-gray-900"
-              >
-                <p className="font-semibold">2. Create Goal</p>
-                <p className="mt-1 text-sm text-gray-400">
-                  Pick a strength or consistency target.
-                </p>
-              </Link>
-              <Link
-                href="/programs"
-                className="rounded-lg border border-white/10 bg-gray-950 p-4 hover:bg-gray-900"
-              >
-                <p className="font-semibold">3. Build Program</p>
-                <p className="mt-1 text-sm text-gray-400">
-                  Make a reusable plan you can start from.
-                </p>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        <div className="mb-8">
-          <CollapsibleSection
-            title="Smart Coach"
-            description="Rule-based coaching from your recent training data."
-          >
-            <div className="grid gap-4">
-              <div className="rounded-3xl border border-gray-800 bg-gray-950 p-5 sm:p-7">
-                <div className="mb-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">
-                      Smart Coach
-                    </p>
-                    <h2 className="mt-4 text-3xl font-bold">Recovery Status</h2>
-                    <p className="mt-2 text-gray-400">
-                      {smartCoachInsight.recoveryLabel} · {smartCoachInsight.nextMove}
-                    </p>
-                  </div>
-                  <RecoveryRing score={smartCoachInsight.recoveryScore} />
-                </div>
-                <div className="grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-3">
-                  <div>
-                    <p className="text-sm text-gray-500">Confidence</p>
-                    <p className="mt-1 text-xl font-bold">{smartCoachInsight.confidence}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Recommendation</p>
-                    <p className="mt-1 text-xl font-bold">{deloadRecommendation.action}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Last Exercise</p>
-                    <p className="mt-1 text-xl font-bold">
-                      {lastExercise ? lastExercise.exercise : "None yet"}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-5 rounded-2xl bg-white/5 p-4">
-                  <p className="text-sm text-gray-300">
-                    {deloadRecommendation.detail}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
-                  <p className="text-sm text-gray-400">Training Focus</p>
-                  <p className="mt-2 text-sm text-gray-300">
-                    {smartCoachInsight.trainingFocus}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
-                  <p className="text-sm text-gray-400">Program Guidance</p>
-                  <p className="mt-2 text-sm text-gray-300">
-                    {smartCoachInsight.programNote}
-                  </p>
-                </div>
-              </div>
-
-              <SorenessHeatmap workouts={workouts} />
-
-              <div className="rounded-2xl border border-gray-800 bg-gray-950 p-4">
-                <p className="text-sm text-gray-400">Last Exercise Snapshot</p>
-                <p className="mt-1 text-xl font-bold">
-                  {lastExercise ? lastExercise.exercise : "None yet"}
-                </p>
-                <p className="mt-2 text-sm text-gray-300">
-                  {lastExercise
-                    ? summarizeExerciseSets(lastExercise)
-                    : "Log a workout to unlock exercise-level feedback."}
-                </p>
-              </div>
-            </div>
-          </CollapsibleSection>
         </div>
 
         <div className="mb-8 grid gap-6 lg:grid-cols-[1fr_1fr]">

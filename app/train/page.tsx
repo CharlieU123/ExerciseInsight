@@ -109,6 +109,7 @@ export default function TrainPage() {
     [currentProgram, workouts]
   );
   const smartCoachInsight = getSmartCoachInsight(workouts, goals, programs);
+  const hasReadinessData = workouts.length >= 2;
   const estimateMinutes = getWorkoutEstimateMinutes(todaysDay);
   const startHref =
     currentProgram && todaysDay
@@ -219,13 +220,25 @@ export default function TrainPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-green-300">
                 Recovery Check
               </p>
-              <p className="mt-4 text-5xl font-bold">
-                {smartCoachInsight.recoveryScore}
-                <span className="text-xl text-gray-400">/100</span>
-              </p>
-              <p className="mt-3 text-sm text-gray-300">
-                {smartCoachInsight.nextMove}
-              </p>
+              {hasReadinessData ? (
+                <>
+                  <p className="mt-4 text-5xl font-bold">
+                    {smartCoachInsight.recoveryScore}
+                    <span className="text-xl text-gray-400">/100</span>
+                  </p>
+                  <p className="mt-3 text-sm text-gray-300">
+                    {smartCoachInsight.nextMove}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="mt-4 text-2xl font-bold">Not enough data</p>
+                  <p className="mt-3 text-sm text-gray-300">
+                    Complete at least two workouts with recovery feedback before
+                    ExerciseInsight generates a readiness score.
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-gray-900/70 p-5 shadow-xl shadow-black/10 backdrop-blur">

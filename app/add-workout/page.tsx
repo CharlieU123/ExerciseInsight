@@ -82,6 +82,8 @@ const activeWorkoutDraftKey = "exerciseinsight-active-workout-draft";
 const defaultRestSeconds = 90;
 const allLibraryMuscles = "All";
 const allLibraryMovements = "All";
+const allLibraryEquipment = "All";
+const allLibraryLevels = "All";
 
 type ActiveWorkoutDraft = {
   workoutDate: string;
@@ -104,6 +106,8 @@ type CompletedWorkoutSummary = {
   workout: Workout;
   shareText: string;
 };
+
+type WorkoutMode = "plan" | "active" | "summary";
 
 function getTodayInputDate() {
   return new Date().toISOString().slice(0, 10);
@@ -241,6 +245,72 @@ function getExerciseHistorySuggestion(history: ReturnType<typeof getExerciseHist
   }
 
   return "Last session was in a productive range. Try to match it first, then progress if the sets move well.";
+}
+
+function ActiveExerciseHistory({
+  workouts,
+  exerciseName,
+}: {
+  workouts: Workout[];
+  exerciseName: string;
+}) {
+  const history = getExerciseHistory(workouts, exerciseName);
+  const lastSession = history[0];
+  const bestSet = history
+    .flatMap((historyEntry) => getExerciseSetEntries(historyEntry.exercise))
+    .sort((firstSet, secondSet) => {
+      const weightDifference = Number(secondSet.weight) - Number(firstSet.weight);
+
+      return weightDifference !== 0
+        ? weightDifference
+        : Number(secondSet.reps) - Number(firstSet.reps);
+    })[0];
+  const suggestedWeight = lastSession
+    ? Math.max(
+        0,
+        lastSession.topWeight + (lastSession.averageRir >= 3 ? 5 : 0)
+      )
+    : 0;
+  const suggestedReps =
+    lastSession?.exercise.setEntries[0]?.reps || "Build from your warmups";
+
+  return (
+    <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Last Session
+        </p>
+        <p className="mt-2 text-sm font-semibold">
+          {lastSession
+            ? summarizeExerciseSets(lastSession.exercise)
+            : "No previous session"}
+        </p>
+      </div>
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Best Set
+        </p>
+        <p className="mt-2 text-sm font-semibold">
+          {bestSet ? `${bestSet.weight} lb x ${bestSet.reps}` : "No data yet"}
+        </p>
+      </div>
+      <div className="rounded-lg border border-cyan-400/20 bg-cyan-950/20 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300">
+          Suggested Today
+        </p>
+        <p className="mt-2 text-sm font-semibold">
+          {lastSession
+            ? `${suggestedWeight} lb · ${suggestedReps} reps`
+            : "Use a comfortable starting load"}
+        </p>
+      </div>
+      {lastSession && (
+        <p className="text-xs text-gray-400 sm:col-span-3">
+          {getExerciseHistorySuggestion(history)}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function formatElapsedTime(totalSeconds: number) {
@@ -556,12 +626,17 @@ function buildCompletedWorkoutSummary(
 }
 
 export default function AddWorkoutPage() {
+  const [workoutMode, setWorkoutMode] = useState<WorkoutMode>("plan");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [selectedLibraryExercise, setSelectedLibraryExercise] = useState("");
   const [librarySearchTerm, setLibrarySearchTerm] = useState("");
   const [libraryMuscleFilter, setLibraryMuscleFilter] = useState(allLibraryMuscles);
   const [libraryMovementFilter, setLibraryMovementFilter] =
     useState(allLibraryMovements);
+  const [libraryEquipmentFilter, setLibraryEquipmentFilter] =
+    useState(allLibraryEquipment);
+  const [libraryLevelFilter, setLibraryLevelFilter] =
+    useState(allLibraryLevels);
   const [editingCurrentExerciseId, setEditingCurrentExerciseId] = useState<
     AppId | null
   >(null);
@@ -644,6 +719,9 @@ export default function AddWorkoutPage() {
 
       if (Array.isArray(parsedDraft.currentExercises)) {
         setCurrentExercises(parsedDraft.currentExercises);
+        if (parsedDraft.currentExercises.length > 0) {
+          setWorkoutMode("active");
+        }
       }
 
       if (typeof parsedDraft.workoutDate === "string") {
@@ -824,6 +902,7 @@ export default function AddWorkoutPage() {
       );
 
       setCurrentExercises(programExercises);
+      setWorkoutMode(programExercises.length > 0 ? "active" : "plan");
       setSelectedTemplate("");
       setCompletedSetIds({});
       setActiveStartedAt(Date.now());
@@ -1356,6 +1435,7 @@ export default function AddWorkoutPage() {
     }
 
     setCurrentExercises([]);
+    setWorkoutMode("plan");
     setSelectedTemplate("");
     setCompletedSetIds({});
     resetElapsedTimer();
@@ -1405,6 +1485,7 @@ export default function AddWorkoutPage() {
     setCompletedWorkoutSummary(
       buildCompletedWorkoutSummary(savedWorkoutForSummary, workouts, durationSeconds)
     );
+    setWorkoutMode("summary");
     setShareMessage("");
     setCurrentExercises([]);
     setCompletedSetIds({});
@@ -1420,6 +1501,7 @@ export default function AddWorkoutPage() {
   function finishCompletedSummary() {
     setCompletedWorkoutSummary(null);
     setShareMessage("");
+    setWorkoutMode("plan");
   }
 
   function editCompletedWorkout() {
@@ -1436,6 +1518,7 @@ export default function AddWorkoutPage() {
     setRestRemainingSeconds(restSeconds);
     setIsRestTimerRunning(false);
     setCompletedWorkoutSummary(null);
+    setWorkoutMode("active");
     setShareMessage("");
     setSaveMessage(
       "Reopened that workout as an editable draft. Saving again creates a new saved version."
@@ -1484,6 +1567,43 @@ export default function AddWorkoutPage() {
   ).sort((firstMovement, secondMovement) =>
     firstMovement.localeCompare(secondMovement)
   );
+  const libraryEquipmentOptions = Array.from(
+    new Set(allLibraryExercises.map((libraryExercise) => libraryExercise.equipment))
+  ).sort((firstEquipment, secondEquipment) =>
+    firstEquipment.localeCompare(secondEquipment)
+  );
+  const libraryLevelOptions = Array.from(
+    new Set(
+      allLibraryExercises.map(
+        (libraryExercise) => libraryExercise.level ?? "Curated"
+      )
+    )
+  ).sort((firstLevel, secondLevel) => firstLevel.localeCompare(secondLevel));
+  const recentExerciseRanks = new Map<string, number>();
+  workouts.slice(0, 8).forEach((workout) => {
+    workout.exercises.forEach((exerciseEntry) => {
+      const exerciseName = normalizeText(exerciseEntry.exercise);
+
+      if (!recentExerciseRanks.has(exerciseName)) {
+        recentExerciseRanks.set(exerciseName, recentExerciseRanks.size);
+      }
+    });
+  });
+  const programExerciseNames = new Set(
+    loadedProgramId
+      ? currentExercises.map((exerciseEntry) =>
+          normalizeText(exerciseEntry.exercise)
+        )
+      : []
+  );
+  const customExerciseNames = new Set(
+    customExercises.map((libraryExercise) =>
+      normalizeText(libraryExercise.exercise)
+    )
+  );
+  const isVerifiedLibraryItem = (libraryExercise: ExerciseLibraryItem) =>
+    !libraryExercise.level &&
+    !customExerciseNames.has(normalizeText(libraryExercise.exercise));
   const librarySearch = librarySearchTerm.trim().toLowerCase();
   const filteredLibraryExercises = allLibraryExercises
     .filter((libraryExercise) => {
@@ -1499,8 +1619,46 @@ export default function AddWorkoutPage() {
       const matchesMovement =
         libraryMovementFilter === allLibraryMovements ||
         (libraryExercise.movement ?? "Strength") === libraryMovementFilter;
+      const matchesEquipment =
+        libraryEquipmentFilter === allLibraryEquipment ||
+        libraryExercise.equipment === libraryEquipmentFilter;
+      const matchesLevel =
+        libraryLevelFilter === allLibraryLevels ||
+        (libraryExercise.level ?? "Curated") === libraryLevelFilter;
 
-      return matchesSearch && matchesMuscle && matchesMovement;
+      return (
+        matchesSearch &&
+        matchesMuscle &&
+        matchesMovement &&
+        matchesEquipment &&
+        matchesLevel
+      );
+    })
+    .sort((firstExercise, secondExercise) => {
+      const getPriority = (libraryExercise: ExerciseLibraryItem) => {
+        const exerciseName = normalizeText(libraryExercise.exercise);
+        const recentRank = recentExerciseRanks.get(exerciseName);
+
+        if (recentRank !== undefined) {
+          return recentRank;
+        }
+
+        if (programExerciseNames.has(exerciseName)) {
+          return 100;
+        }
+
+        if (isVerifiedLibraryItem(libraryExercise)) {
+          return 200;
+        }
+
+        return 300;
+      };
+      const priorityDifference =
+        getPriority(firstExercise) - getPriority(secondExercise);
+
+      return priorityDifference !== 0
+        ? priorityDifference
+        : firstExercise.exercise.localeCompare(secondExercise.exercise);
     })
     .slice(0, 80);
   const selectedLibraryItem = allLibraryExercises.find(
@@ -1530,11 +1688,21 @@ export default function AddWorkoutPage() {
       <section className="mx-auto max-w-7xl">
         <div className="mb-8">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-400">
-            Add Workout
+            Train
           </p>
-          <h1 className="mb-3 text-3xl font-bold sm:text-4xl">Build a Workout Session</h1>
+          <h1 className="mb-3 text-3xl font-bold sm:text-4xl">
+            {workoutMode === "plan"
+              ? "Build or Start a Workout"
+              : workoutMode === "active"
+                ? "Active Workout"
+                : "Workout Summary"}
+          </h1>
           <p className="text-gray-300">
-            Add exercises one at a time, then save the full workout.
+            {workoutMode === "plan"
+              ? "Start from today's program, a template, or an empty workout."
+              : workoutMode === "active"
+                ? "Complete each set, run your rest timer, and finish when training is done."
+                : "Review the session, share the result, or continue to your progress."}
           </p>
           {saveMessage && (
             <p className="mt-3 rounded-md border border-white/10 bg-gray-950 p-3 text-sm text-gray-300">
@@ -1543,7 +1711,33 @@ export default function AddWorkoutPage() {
           )}
         </div>
 
-        {completedWorkoutSummary && (
+        <div className="mb-8 grid grid-cols-3 gap-2 rounded-2xl border border-white/10 bg-gray-900/70 p-2 shadow-xl shadow-black/10 backdrop-blur">
+          {(["plan", "active", "summary"] as WorkoutMode[]).map((mode) => {
+            const isDisabled =
+              (mode === "active" && currentExercises.length === 0) ||
+              (mode === "summary" && !completedWorkoutSummary);
+
+            return (
+              <button
+                key={mode}
+                type="button"
+                disabled={isDisabled}
+                onClick={() => setWorkoutMode(mode)}
+                className={
+                  "rounded-xl px-3 py-3 text-sm font-semibold capitalize sm:text-base " +
+                  (workoutMode === mode
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/5 text-gray-300 hover:bg-white/10") +
+                  (isDisabled ? " cursor-not-allowed opacity-40" : "")
+                }
+              >
+                {mode}
+              </button>
+            );
+          })}
+        </div>
+
+        {workoutMode === "summary" && completedWorkoutSummary && (
           <section className="mb-8 rounded-2xl border border-green-400/30 bg-green-950/20 p-5 shadow-[0_0_40px_rgba(34,197,94,0.14)] sm:p-6">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -1643,8 +1837,20 @@ export default function AddWorkoutPage() {
           </section>
         )}
 
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.25fr)]">
-          <div className="min-w-0 space-y-6">
+        <div
+          className={
+            workoutMode === "plan"
+              ? "grid gap-8"
+              : workoutMode === "active"
+                ? "block"
+                : "hidden"
+          }
+        >
+          <div
+            className={
+              workoutMode === "plan" ? "min-w-0 space-y-6" : "hidden"
+            }
+          >
             <CollapsibleSection
               title="Workout Template (optional)"
               description="Pick a split to quickly load starter exercises."
@@ -1711,7 +1917,7 @@ export default function AddWorkoutPage() {
                     </datalist>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <select
                       aria-label="Filter library by muscle group"
                       className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
@@ -1739,6 +1945,38 @@ export default function AddWorkoutPage() {
                         </option>
                       ))}
                     </select>
+
+                    <select
+                      aria-label="Filter library by equipment"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={libraryEquipmentFilter}
+                      onChange={(event) =>
+                        setLibraryEquipmentFilter(event.target.value)
+                      }
+                    >
+                      <option value={allLibraryEquipment}>All equipment</option>
+                      {libraryEquipmentOptions.map((equipment) => (
+                        <option key={equipment} value={equipment}>
+                          {equipment}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      aria-label="Filter library by difficulty"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={libraryLevelFilter}
+                      onChange={(event) =>
+                        setLibraryLevelFilter(event.target.value)
+                      }
+                    >
+                      <option value={allLibraryLevels}>All difficulties</option>
+                      {libraryLevelOptions.map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1752,9 +1990,14 @@ export default function AddWorkoutPage() {
                           selectExerciseFromLibrary(libraryExercise.exercise);
                           setLibrarySearchTerm(libraryExercise.exercise);
                         }}
-                        className="rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-white/15"
+                        className="inline-flex items-center gap-2 rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-gray-200 hover:bg-white/15"
                       >
                         {libraryExercise.exercise}
+                        {isVerifiedLibraryItem(libraryExercise) && (
+                          <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-cyan-200">
+                            Verified
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -1777,6 +2020,9 @@ export default function AddWorkoutPage() {
                     >
                       {libraryExercise.exercise} - {libraryExercise.muscleGroup}
                       {libraryExercise.movement ? ` - ${libraryExercise.movement}` : ""}
+                      {isVerifiedLibraryItem(libraryExercise)
+                        ? " - Verified"
+                        : ""}
                     </option>
                   ))}
                 </select>
@@ -2219,21 +2465,31 @@ export default function AddWorkoutPage() {
 
               <button
                 type="button"
-                onClick={saveWorkout}
-                disabled={currentExercises.length === 0 || !feeling}
-                className="w-full rounded-md bg-green-600 p-3 font-semibold hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                onClick={() => setWorkoutMode("active")}
+                disabled={currentExercises.length === 0}
+                className="w-full rounded-md bg-blue-600 p-3 font-semibold hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
               >
-                Save Full Workout
+                Continue to Active Workout
               </button>
             </div>
             </CollapsibleSection>
           </div>
 
-          <div className="min-w-0">
+          <div className={workoutMode === "active" ? "min-w-0" : "hidden"}>
             <CollapsibleSection
               title="Active Workout"
-              description="Use this screen during the workout. Changes autosave on this device."
+              description="Complete sets during training. Your draft autosaves after every change."
             >
+            <div className="mb-5 flex flex-col gap-2 rounded-lg border border-cyan-400/20 bg-cyan-950/20 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-semibold text-cyan-100">
+                Draft saved on this device
+              </p>
+              <p className="text-gray-300">
+                {userId
+                  ? "Finish the workout to sync it to your account."
+                  : "Finish the workout to save it on this device."}
+              </p>
+            </div>
             <div className="mb-5 grid gap-3 md:grid-cols-3">
               <div className="rounded-lg border border-blue-500/20 bg-blue-950/20 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-blue-200">
@@ -2406,6 +2662,11 @@ export default function AddWorkoutPage() {
                         </button>
                       </div>
                     </div>
+
+                    <ActiveExerciseHistory
+                      workouts={workouts}
+                      exerciseName={exerciseEntry.exercise}
+                    />
 
                     {swapExerciseId === exerciseEntry.id && (
                       <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-950/20 p-4">
@@ -2631,6 +2892,94 @@ export default function AddWorkoutPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {currentExercises.length > 0 && (
+              <section className="mt-6 rounded-xl border border-green-400/20 bg-green-950/10 p-4 sm:p-5">
+                <div className="mb-5">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-green-300">
+                    Finish Workout
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold">
+                    Final session check-in
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-400">
+                    Add the workout date and how the session felt before saving.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="active-workout-date"
+                      className="mb-1 block text-sm text-gray-300"
+                    >
+                      Workout date
+                    </label>
+                    <input
+                      id="active-workout-date"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      type="date"
+                      value={workoutDate}
+                      onChange={(event) => setWorkoutDate(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="active-workout-feeling"
+                      className="mb-1 block text-sm text-gray-300"
+                    >
+                      How did the workout feel?
+                    </label>
+                    <select
+                      id="active-workout-feeling"
+                      className="w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                      value={feeling}
+                      onChange={(event) => setFeeling(event.target.value)}
+                    >
+                      <option value="">Choose one</option>
+                      <option value="Great">Great</option>
+                      <option value="Good">Good</option>
+                      <option value="Okay">Okay</option>
+                      <option value="Tired">Tired</option>
+                      <option value="Weak">Weak</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <label
+                      htmlFor="active-workout-notes"
+                      className="block text-sm text-gray-300"
+                    >
+                      Workout notes
+                    </label>
+                    <SpeechToTextButton onTranscript={addVoiceNote} />
+                  </div>
+                  <textarea
+                    id="active-workout-notes"
+                    className="min-h-24 w-full rounded-md border border-gray-700 bg-gray-950 p-3"
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    placeholder="PRs, pain, technique notes, or what to change next time..."
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={saveWorkout}
+                  disabled={!feeling}
+                  className="mt-5 w-full rounded-lg bg-green-600 p-4 text-lg font-semibold hover:bg-green-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                >
+                  Finish and Save Workout
+                </button>
+                {!feeling && (
+                  <p className="mt-2 text-center text-xs text-gray-500">
+                    Choose how the workout felt to finish.
+                  </p>
+                )}
+              </section>
             )}
             </CollapsibleSection>
           </div>
